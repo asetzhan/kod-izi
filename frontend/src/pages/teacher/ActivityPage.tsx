@@ -36,6 +36,7 @@ export function ActivityPage() {
             <th>{t("activity.largePastes")}</th>
             <th>{t("activity.pastedChars")}</th>
             <th>{t("activity.focusLost")}</th>
+            <th>{t("activity.lateEvents")}</th>
             <th>{t("activity.sessions")}</th>
           </tr>
         </thead>
@@ -50,6 +51,7 @@ export function ActivityPage() {
               <td className={row.large_pastes > 0 ? "flag" : undefined}>{row.large_pastes}</td>
               <td>{row.pasted_chars}</td>
               <td>{row.focus_lost}</td>
+              <td className={row.late_events > 0 ? "flag" : undefined}>{row.late_events}</td>
               <td>{row.sessions.length}</td>
             </tr>
           ))}

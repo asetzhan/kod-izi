@@ -7,7 +7,15 @@ import type { SubmissionResult, WorkSession } from "../../api/types";
 import type { CodeEditorProps } from "../../components/CodeEditor";
 import i18n from "../../i18n";
 import { mockApi } from "../../test/fetchMock";
+import { AuthContext } from "../../auth/AuthContext";
 import { WorkspacePage } from "./WorkspacePage";
+
+const AUTH = {
+  user: { id: 7, email: "s@example.com", full_name: "S", roles: ["student" as const], is_active: true },
+  loading: false,
+  signIn: async () => AUTH.user,
+  signOut: async () => undefined,
+};
 
 // Monaco does not run in jsdom: a textarea stands in for the editor.
 vi.mock("../../components/CodeEditor", () => ({
@@ -70,11 +78,13 @@ beforeEach(async () => {
 
 function renderPage() {
   render(
-    <MemoryRouter initialEntries={["/student/assessments/3/tasks/9"]}>
-      <Routes>
-        <Route path="/student/assessments/:assessmentId/tasks/:taskId" element={<WorkspacePage />} />
-      </Routes>
-    </MemoryRouter>,
+    <AuthContext.Provider value={AUTH}>
+      <MemoryRouter initialEntries={["/student/assessments/3/tasks/9"]}>
+        <Routes>
+          <Route path="/student/assessments/:assessmentId/tasks/:taskId" element={<WorkspacePage />} />
+        </Routes>
+      </MemoryRouter>
+    </AuthContext.Provider>,
   );
 }
 

@@ -7,6 +7,7 @@ computer) closes the previous one, and the old one can no longer write (spec 14.
 from datetime import UTC, datetime
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.enums import TaskStatus, TraceKind
@@ -57,11 +58,13 @@ def open_session(
 
     if assessment is not None:
         previous = db.scalars(
-            select(WorkSession).where(
+            select(WorkSession)
+            .where(
                 WorkSession.user_id == user.id,
                 WorkSession.assessment_id == assessment.id,
                 WorkSession.closed_at.is_(None),
             )
+            .with_for_update()
         ).all()
         for old in previous:
             old.closed_at = datetime.now(UTC)
@@ -75,7 +78,12 @@ def open_session(
         user_agent=(user_agent or "")[:255] or None,
     )
     db.add(session)
-    db.flush()
+    try:
+        with db.begin_nested():
+            db.flush()
+    except IntegrityError:
+        # Another request opened a session at the same moment (unique index).
+        raise SessionError(409, "session_conflict") from None
     record_server_event(db, session, TraceKind.SESSION_START, {"user_agent": session.user_agent})
     return session
 

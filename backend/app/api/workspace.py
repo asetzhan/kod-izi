@@ -6,7 +6,7 @@
 
 import uuid
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -37,10 +37,9 @@ from app.services import audit
 from app.services.access import can_edit_course, is_staff
 from app.services.audit import AuditAction
 from app.services.grading import run_request, run_tests
-from app.services.questions import generate_questions
+from app.services.questions import generate_questions, template_questions
 from app.services.sessions import SessionError, latest_code, open_session, writable_session
 from app.services.trace import (
-    CLIENT_KINDS,
     INTEGRITY_KEY,
     ClientEvent,
     IntegritySettings,
@@ -57,7 +56,15 @@ Enqueue = Annotated[Callable[[int], None], Depends(get_enqueue)]
 
 MAX_CODE = 100_000
 OUTPUT_SHOWN = 16_000
-RUNS_PER_MINUTE = 30
+# Budgets per student (spec 14.1: Judge0 and the LLM are shared resources).
+JUDGE_JOBS_PER_MINUTE = 60  # one job = one program run in Judge0
+SUBMITS_PER_10_MIN = 10
+EVENTS_PER_MINUTE = 300
+EVENTS_PER_SESSION = 20_000
+QUESTION_REQUESTS_PER_DAY = 40
+LLM_CODE_LIMIT = 20_000
+# Offline events of a closed session are accepted for this long after closing.
+LATE_EVENTS_GRACE = timedelta(minutes=30)
 
 
 def _session_error(exc: SessionError) -> HTTPException:
@@ -78,13 +85,18 @@ def _task(db: Session, task_id: int) -> Task:
     return task
 
 
-def _limit_runs(redis: RedisClient, user: User) -> None:
-    """Judge0 is shared by everyone: a student cannot flood it with runs."""
-    key = f"runs:{user.id}:{datetime.now(UTC):%Y%m%d%H%M}"
-    count = int(redis.incr(key))
-    if count == 1:
-        redis.expire(key, 120)
-    if count > RUNS_PER_MINUTE:
+def _spend(redis: RedisClient, key: str, amount: int, limit: int, ttl_s: int) -> bool:
+    """Add `amount` to a counter; False when it went over `limit`."""
+    total = int(redis.incrby(key, amount))
+    if total == amount:
+        redis.expire(key, ttl_s)
+    return total <= limit
+
+
+def _limit_judge(redis: RedisClient, user: User, jobs: int) -> None:
+    """Judge0 is shared by everyone: count every program run, not every request."""
+    key = f"judge_jobs:{user.id}:{datetime.now(UTC):%Y%m%d%H%M}"
+    if not _spend(redis, key, max(jobs, 1), JUDGE_JOBS_PER_MINUTE, 120):
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, detail="too_many_runs")
 
 
@@ -134,7 +146,7 @@ class EventBatch(BaseModel):
 
 @router.post("/sessions/{session_id}/events")
 def post_events(
-    session_id: uuid.UUID, body: EventBatch, user: CurrentUser, db: DbSession
+    session_id: uuid.UUID, body: EventBatch, user: CurrentUser, db: DbSession, redis: RedisClient
 ) -> dict[str, Any]:
     """Browser events (snapshots, pastes, focus). Resending a batch is safe.
 
@@ -146,17 +158,23 @@ def post_events(
     if session is None or session.user_id != user.id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="forbidden")
     for event in body.events:
-        if event.kind not in CLIENT_KINDS:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail="kind_not_allowed")
-        if len(str(event.payload)) > MAX_CODE + 1000:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail="event_too_large")
+        try:
+            event.checked_payload()
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from None
+    now = datetime.now(UTC)
     deadline = _closing_time(db, session)
     events = body.events
     if deadline is not None:
         events = [e for e in events if e.client_ts <= deadline]
-        if not events:
+        if not events or now > deadline + LATE_EVENTS_GRACE:
             raise HTTPException(status.HTTP_409_CONFLICT, detail="session_closed")
-    stored = ingest_client_events(db, session, events)
+    count = len(events)
+    if not _spend(
+        redis, f"events:{user.id}:{now:%Y%m%d%H%M}", count, EVENTS_PER_MINUTE, 120
+    ) or not _spend(redis, f"events_session:{session.id}", count, EVENTS_PER_SESSION, 7 * 86400):
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, detail="too_many_events")
+    stored = ingest_client_events(db, session, events, latest=deadline or now)
     db.commit()
     return {"stored": stored, "session_closed": deadline is not None}
 
@@ -197,7 +215,7 @@ def run_code(
 ) -> RunOut:
     """ФТ-24: compile and run with the student's own input."""
     session = _writable(db, user, session_id)
-    _limit_runs(redis, user)
+    _limit_judge(redis, user, 1)
     task = _task(db, session.task_id)
     try:
         result = judge.run(run_request(task, body.code, body.language, body.stdin))
@@ -260,9 +278,9 @@ def run_public_tests(
 ) -> TestsOut:
     """ФТ-24: run the public tests only; hidden tests are used at submission."""
     session = _writable(db, user, session_id)
-    _limit_runs(redis, user)
     task = _task(db, session.task_id)
     public = [t for t in task.tests if not t.is_hidden]
+    _limit_judge(redis, user, len(public))
     try:
         results, compile_output = run_tests(judge, task, body.code, body.language, public)
     except JudgeUnavailableError:
@@ -332,7 +350,15 @@ class SubmissionOut(BaseModel):
     questions: list[dict[str, Any]]
 
     @classmethod
-    def build(cls, s: Submission) -> "SubmissionOut":
+    def build(cls, s: Submission, *, for_staff: bool = False) -> "SubmissionOut":
+        """Students get only totals for hidden tests.
+
+        Per-test verdicts, time and memory of hidden tests would let a program leak the
+        hidden input bit by bit (spec 14.1); the teacher sees everything.
+        """
+        shown = s.results if for_staff else [r for r in s.results if not r.is_hidden]
+        times = [r.time_ms for r in shown if r.time_ms is not None]
+        memories = [r.memory_kb for r in shown if r.memory_kb is not None]
         return cls(
             id=s.id,
             task_id=s.task_id,
@@ -341,8 +367,8 @@ class SubmissionOut(BaseModel):
             verdict=Verdict(s.verdict) if s.verdict else None,
             tests_passed=s.tests_passed,
             tests_total=s.tests_total,
-            max_time_ms=s.max_time_ms,
-            max_memory_kb=s.max_memory_kb,
+            max_time_ms=s.max_time_ms if for_staff else (max(times) if times else None),
+            max_memory_kb=s.max_memory_kb if for_staff else (max(memories) if memories else None),
             compile_output=s.compile_output,
             results=[
                 TestResultOut(
@@ -352,7 +378,7 @@ class SubmissionOut(BaseModel):
                     time_ms=r.time_ms,
                     memory_kb=r.memory_kb,
                 )
-                for r in s.results
+                for r in shown
             ],
             created_at=s.created_at,
             explanation=s.explanation.text if s.explanation else None,
@@ -371,8 +397,20 @@ def submit(
 ) -> SubmissionOut:
     """Submission with explanation (ФТ-27); grading runs in the background (ФТ-31)."""
     session = _writable(db, user, session_id)
-    _limit_runs(redis, user)
     task = _task(db, session.task_id)
+    in_flight = db.scalar(
+        select(Submission.id).where(
+            Submission.user_id == user.id,
+            Submission.status.in_([SubmissionStatus.QUEUED.value, SubmissionStatus.RUNNING.value]),
+            Submission.created_at > datetime.now(UTC) - timedelta(minutes=15),
+        )
+    )
+    if in_flight is not None:
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, detail="submission_in_progress")
+    window = f"submits:{user.id}:{datetime.now(UTC).timestamp() // 600:.0f}"
+    if not _spend(redis, window, 1, SUBMITS_PER_10_MIN, 900):
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, detail="too_many_submissions")
+    _limit_judge(redis, user, len(task.tests))
     submission = Submission(
         session_id=session.id,
         user_id=user.id,
@@ -385,9 +423,13 @@ def submit(
     )
     db.add(submission)
     db.flush()
-    questions, source = generate_questions(
-        get_provider(), task.statement_md, body.code, body.ui_language
-    )
+    day_key = f"questions:{user.id}:{datetime.now(UTC):%Y%m%d}"
+    if _spend(redis, day_key, 1, QUESTION_REQUESTS_PER_DAY, 2 * 86400):
+        questions, source = generate_questions(
+            get_provider(), task.statement_md, body.code[:LLM_CODE_LIMIT], body.ui_language
+        )
+    else:  # LLM quota used up: template questions, no LLM call
+        questions, source = template_questions(body.code, body.ui_language), "template"
     db.add(
         Explanation(
             submission_id=submission.id,
@@ -427,7 +469,8 @@ def _readable_submission(db: Session, user: User, submission_id: int) -> Submiss
 
 @router.get("/submissions/{submission_id}")
 def get_submission(submission_id: int, user: CurrentUser, db: DbSession) -> SubmissionOut:
-    return SubmissionOut.build(_readable_submission(db, user, submission_id))
+    submission = _readable_submission(db, user, submission_id)
+    return SubmissionOut.build(submission, for_staff=submission.user_id != user.id)
 
 
 @router.get("/my/submissions")
@@ -534,6 +577,8 @@ class StudentActivityOut(BaseModel):
     large_pastes: int
     pasted_chars: int
     focus_lost: int
+    # Events that reached the server long after they happened: worth a look.
+    late_events: int
     last_verdicts: dict[int, Verdict | None]
 
 
@@ -559,6 +604,16 @@ def assessment_activity(
             TraceEvent.assessment_id == assessment_id, TraceEvent.user_id == student.id
         )
         pastes = db.scalars(base.where(TraceEvent.kind == TraceKind.PASTE.value)).all()
+        late = db.scalar(
+            select(func.count())
+            .select_from(TraceEvent)
+            .where(
+                TraceEvent.assessment_id == assessment_id,
+                TraceEvent.user_id == student.id,
+                TraceEvent.flagged.is_(True),
+                TraceEvent.kind != TraceKind.PASTE.value,
+            )
+        )
         focus_lost = db.scalar(
             select(func.count())
             .select_from(TraceEvent)
@@ -594,6 +649,7 @@ def assessment_activity(
                 large_pastes=sum(1 for p in pastes if p.flagged),
                 pasted_chars=sum(int(p.payload.get("length", 0)) for p in pastes),
                 focus_lost=int(focus_lost or 0),
+                late_events=int(late or 0),
                 last_verdicts=verdicts,
             )
         )

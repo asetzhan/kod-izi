@@ -19,7 +19,7 @@ describe("ft29 teacher activity", () => {
       }),
       "GET /api/assessments/3/activity": () => [
         { user_id: 5, full_name: "Айгерім", sessions: ["a", "b"], large_pastes: 2,
-          pasted_chars: 1400, focus_lost: 4, last_verdicts: { "9": "WA" } },
+          pasted_chars: 1400, focus_lost: 4, late_events: 0, last_verdicts: { "9": "WA" } },
       ],
       "GET /api/tasks?course_id=1": () => [
         { id: 9, course_id: 1, topic_id: null, external_key: null, title: "Жұп немесе тақ",

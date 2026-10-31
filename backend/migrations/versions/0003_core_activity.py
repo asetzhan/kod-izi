@@ -57,6 +57,13 @@ def upgrade() -> None:
     )
     op.create_index(op.f("ix_work_sessions_task_id"), "work_sessions", ["task_id"], unique=False)
     op.create_index(op.f("ix_work_sessions_user_id"), "work_sessions", ["user_id"], unique=False)
+    op.create_index(
+        "uq_work_sessions_one_active",
+        "work_sessions",
+        ["user_id", "assessment_id"],
+        unique=True,
+        postgresql_where=sa.text("closed_at IS NULL AND assessment_id IS NOT NULL"),
+    )
     op.create_table(
         "submissions",
         sa.Column("id", sa.BigInteger(), sa.Identity(always=False), nullable=False),
@@ -273,6 +280,7 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_submissions_session_id"), table_name="submissions")
     op.drop_index(op.f("ix_submissions_assessment_id"), table_name="submissions")
     op.drop_table("submissions")
+    op.drop_index("uq_work_sessions_one_active", table_name="work_sessions")
     op.drop_index(op.f("ix_work_sessions_user_id"), table_name="work_sessions")
     op.drop_index(op.f("ix_work_sessions_task_id"), table_name="work_sessions")
     op.drop_index(op.f("ix_work_sessions_assessment_id"), table_name="work_sessions")

@@ -1,6 +1,7 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 
 import * as api from "../api/client";
+import { clearUserTrace, sendEvents } from "../workspace/TraceRecorder";
 import { AuthContext, type AuthState } from "./AuthContext";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -23,9 +24,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
+    if (user) await clearUserTrace(sendEvents, user.id);
     setUser(null);
     await api.logout();
-  }, []);
+  }, [user]);
 
   const value = useMemo<AuthState>(
     () => ({ user, loading, signIn, signOut }),

@@ -34,6 +34,16 @@ def _unb64(value: str | None) -> str:
     return base64.b64decode(value).decode("utf-8", errors="replace")[:OUTPUT_LIMIT]
 
 
+# Must not exceed MAX_* in infra/judge0/judge0.conf, or Judge0 refuses the run.
+MAX_CPU_TIME_S = 10
+MAX_WALL_TIME_S = 20
+MAX_MEMORY_KB = 524288
+
+
+def wall_time_s(cpu_time_s: float) -> float:
+    return min(max(cpu_time_s * 3, 5), MAX_WALL_TIME_S)
+
+
 def to_result(data: dict[str, Any], memory_limit_kb: int) -> RunResult:
     status_id = int(data["status"]["id"])
     stdout = _unb64(data.get("stdout"))
@@ -80,7 +90,7 @@ class Judge0Client:
             "compiler_options": COMPILER_OPTIONS[request.language],
             "stdin": _b64(request.stdin),
             "cpu_time_limit": request.cpu_time_limit_s,
-            "wall_time_limit": max(request.cpu_time_limit_s * 3, 5),
+            "wall_time_limit": wall_time_s(request.cpu_time_limit_s),
             "memory_limit": request.memory_limit_kb,
             "enable_network": False,
             "redirect_stderr_to_stdout": False,
@@ -89,7 +99,10 @@ class Judge0Client:
             created = self._http.post("/submissions?base64_encoded=true&wait=false", json=body)
             created.raise_for_status()
             token = created.json()["token"]
-            deadline = time.monotonic() + self._timeout
+            # Queue time plus the run itself; never wait longer than the configured cap.
+            deadline = time.monotonic() + min(
+                self._timeout, wall_time_s(request.cpu_time_limit_s) + 30
+            )
             while True:
                 response = self._http.get(
                     f"/submissions/{token}",

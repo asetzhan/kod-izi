@@ -14,6 +14,7 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
+from app.api import workspace
 from app.jobs import get_enqueue
 from app.judge import get_judge
 from app.main import app
@@ -192,11 +193,17 @@ def test_ft31_wrong_solutions_get_expected_verdict(
         assert "error" in result["compile_output"]
 
 
-def test_ft31_student_does_not_get_hidden_test_data(client: TestClient, ws: dict[str, Any]) -> None:
+def test_sec14_student_gets_only_totals_for_hidden_tests(
+    client: TestClient, ws: dict[str, Any]
+) -> None:
     result = _submit(client, ws, _open(client, ws), code="// fake:WA\nint main() {}")
-    assert [r["is_hidden"] for r in result["results"]] == [False, True, True]
+    # Per-test verdicts, time and memory of hidden tests could leak the hidden input.
+    assert [r["position"] for r in result["results"]] == [1]
+    assert (result["verdict"], result["tests_passed"], result["tests_total"]) == ("WA", 0, 3)
     for r in result["results"]:
         assert set(r) == {"position", "is_hidden", "verdict", "time_ms", "memory_kb"}
+    staff = client.get(f"/api/submissions/{result['id']}", headers=ws["teacher"]).json()
+    assert [r["is_hidden"] for r in staff["results"]] == [False, True, True]
 
 
 def test_ft31_judge_down_marks_submission_as_error(
@@ -436,12 +443,110 @@ def test_sec14_students_cannot_touch_each_others_work(
     assert client.get(f"/api/submissions/{result['id']}", headers=ws["teacher"]).status_code == 200
 
 
-def test_sec14_runs_are_rate_limited(client: TestClient, ws: dict[str, Any]) -> None:
+def test_sec14_judge_runs_are_rate_limited(
+    client: TestClient, ws: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(workspace, "JUDGE_JOBS_PER_MINUTE", 5)
     sid = _open(client, ws)
     codes = [
         client.post(
             f"/api/sessions/{sid}/run", headers=ws["student"], json={"code": "// fake:ECHO"}
         ).status_code
-        for _ in range(31)
+        for _ in range(6)
     ]
-    assert codes[:30] == [200] * 30 and codes[30] == 429
+    assert codes == [200] * 5 + [429]
+
+
+def test_sec14_one_submission_in_flight_and_limited_per_window(
+    client: TestClient, ws: dict[str, Any], db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sid = _open(client, ws)
+    app.dependency_overrides[get_enqueue] = lambda: lambda submission_id: None  # stays queued
+    body = {"code": SOLUTION, "explanation": "x"}
+    assert (
+        client.post(f"/api/sessions/{sid}/submit", headers=ws["student"], json=body).status_code
+        == 201
+    )
+    second = client.post(f"/api/sessions/{sid}/submit", headers=ws["student"], json=body)
+    assert second.status_code == 429 and second.json()["detail"] == "submission_in_progress"
+
+
+def test_ft27_llm_quota_falls_back_to_template_questions(
+    client: TestClient, ws: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(workspace, "QUESTION_REQUESTS_PER_DAY", 0)
+
+    def no_llm(*args: object) -> None:
+        raise AssertionError("LLM must not be called over quota")
+
+    monkeypatch.setattr(workspace, "generate_questions", no_llm)
+    result = _submit(client, ws, _open(client, ws))
+    assert 2 <= len(result["questions"]) <= 3
+
+
+@pytest.mark.parametrize(
+    "event",
+    [
+        {"kind": "paste", "payload": {"length": -100000}},
+        {"kind": "paste", "payload": {"length": "many"}},
+        {"kind": "snapshot", "payload": {"code": 5}},
+        {"kind": "focus_lost", "payload": {"extra": "x"}},
+    ],
+)
+def test_ft29_malformed_event_payload_is_rejected(
+    client: TestClient, ws: dict[str, Any], event: dict[str, Any]
+) -> None:
+    sid = _open(client, ws)
+    batch = {"events": [{"seq": 1, "client_ts": datetime.now(UTC).isoformat(), **event}]}
+    response = client.post(f"/api/sessions/{sid}/events", headers=ws["student"], json=batch)
+    assert response.status_code == 422
+
+
+def test_ft25_browser_clock_is_not_trusted(
+    client: TestClient, ws: dict[str, Any], db: Session
+) -> None:
+    sid = _open(client, ws)
+    past = (datetime.now(UTC) - timedelta(days=3)).isoformat()
+    future = (datetime.now(UTC) + timedelta(days=3)).isoformat()
+    naive = datetime.now().replace(tzinfo=None).isoformat()
+    bad = client.post(
+        f"/api/sessions/{sid}/events",
+        headers=ws["student"],
+        json={"events": [{"seq": 9, "kind": "focus_lost", "client_ts": naive}]},
+    )
+    assert bad.status_code == 422
+    client.post(
+        f"/api/sessions/{sid}/events",
+        headers=ws["student"],
+        json={
+            "events": [
+                {"seq": 1, "kind": "snapshot", "client_ts": past, "payload": {"code": "a"}},
+                {"seq": 2, "kind": "snapshot", "client_ts": future, "payload": {"code": "b"}},
+            ]
+        },
+    )
+    trace = client.get(f"/api/sessions/{sid}/trace", headers=ws["teacher"]).json()
+    started = datetime.fromisoformat(trace["started_at"])
+    snapshots = [e for e in trace["events"] if e["kind"] == "snapshot"]
+    for e in snapshots:
+        ts = datetime.fromisoformat(e["client_ts"])
+        assert started <= ts <= datetime.now(UTC) + timedelta(seconds=1)
+    rows = client.get(
+        f"/api/assessments/{ws['assessment']['id']}/activity", headers=ws["teacher"]
+    ).json()
+    assert sum(r["late_events"] for r in rows) == 0
+
+
+def test_ft25_closed_session_accepts_late_events_only_for_a_while(
+    client: TestClient, ws: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    first = _open(client, ws)
+    before = datetime.now(UTC).isoformat()
+    _open(client, ws)
+    monkeypatch.setattr(workspace, "LATE_EVENTS_GRACE", timedelta(seconds=-1))
+    late = client.post(
+        f"/api/sessions/{first}/events",
+        headers=ws["student"],
+        json={"events": [{"seq": 1, "kind": "focus_lost", "client_ts": before}]},
+    )
+    assert late.status_code == 409

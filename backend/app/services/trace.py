@@ -1,9 +1,9 @@
 """Digital trace writer (ФТ-25) and academic integrity marks (ФТ-29)."""
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import AwareDatetime, BaseModel, Field, ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
@@ -51,30 +51,75 @@ def record_server_event(
     )
 
 
+class SnapshotPayload(BaseModel, extra="forbid"):
+    code: str = Field(max_length=100_000)
+
+
+class PastePayload(BaseModel, extra="forbid"):
+    length: int = Field(ge=0, le=1_000_000)
+    lines: int = Field(default=1, ge=0, le=100_000)
+
+
+class EmptyPayload(BaseModel, extra="forbid"):
+    pass
+
+
+PAYLOADS: dict[TraceKind, type[BaseModel]] = {
+    TraceKind.SNAPSHOT: SnapshotPayload,
+    TraceKind.PASTE: PastePayload,
+    TraceKind.FOCUS_LOST: EmptyPayload,
+    TraceKind.FOCUS_BACK: EmptyPayload,
+}
+
+# An event that reaches the server this long after it happened is marked for the teacher.
+LATE_AFTER = timedelta(minutes=5)
+
+
 class ClientEvent(BaseModel):
-    seq: int = Field(ge=0)
+    seq: int = Field(ge=0, le=10_000_000)
     kind: TraceKind
-    client_ts: datetime
+    client_ts: AwareDatetime
     payload: dict[str, Any] = Field(default_factory=dict)
 
+    def checked_payload(self) -> dict[str, Any]:
+        """Payload validated against the schema of its kind; raises ValueError."""
+        schema = PAYLOADS.get(self.kind)
+        if schema is None:
+            raise ValueError("kind_not_allowed")
+        try:
+            return schema.model_validate(self.payload).model_dump()
+        except ValidationError:
+            raise ValueError("bad_payload") from None
 
-def ingest_client_events(db: Session, session: WorkSession, events: list[ClientEvent]) -> int:
-    """Store browser events; a batch sent again after a network failure is not duplicated."""
+
+def ingest_client_events(
+    db: Session, session: WorkSession, events: list[ClientEvent], latest: datetime
+) -> int:
+    """Store browser events; a batch sent again after a network failure is not duplicated.
+
+    The browser's clock is not trusted: its time is kept within the session's lifetime
+    (from the start to `latest`), and events that arrive long after they happened are
+    marked for the teacher.
+    """
     settings = get_integrity(db)
-    rows = [
-        {
-            "session_id": session.id,
-            "user_id": session.user_id,
-            "task_id": session.task_id,
-            "assessment_id": session.assessment_id,
-            "seq": e.seq,
-            "kind": e.kind.value,
-            "client_ts": e.client_ts,
-            "payload": e.payload,
-            "flagged": is_flagged(e.kind, e.payload, settings),
-        }
-        for e in events
-    ]
+    now = datetime.now(UTC)
+    rows = []
+    for e in events:
+        payload = e.checked_payload()
+        client_ts = min(max(e.client_ts, session.started_at), latest)
+        rows.append(
+            {
+                "session_id": session.id,
+                "user_id": session.user_id,
+                "task_id": session.task_id,
+                "assessment_id": session.assessment_id,
+                "seq": e.seq,
+                "kind": e.kind.value,
+                "client_ts": client_ts,
+                "payload": payload,
+                "flagged": is_flagged(e.kind, payload, settings) or now - client_ts > LATE_AFTER,
+            }
+        )
     if not rows:
         return 0
     statement = (

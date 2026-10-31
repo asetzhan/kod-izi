@@ -11,19 +11,19 @@ import type {
 } from "../../api/types";
 import { CodeEditor } from "../../components/CodeEditor";
 import { ErrorText, Status } from "../../components/Status";
-import { type ClientEvent, flushLeftovers, TraceRecorder } from "../../workspace/TraceRecorder";
+import { useAuth } from "../../auth/AuthContext";
+import { flushLeftovers, sendEvents, TraceRecorder } from "../../workspace/TraceRecorder";
 
 const SNAPSHOT_DELAY_MS = 2000;
 const POLL_MS = 1500;
-
-function sendEvents(sessionId: string, events: ClientEvent[]) {
-  return apiSend("POST", `/api/sessions/${sessionId}/events`, { events });
-}
+const POLL_LIMIT = 200; // about five minutes
 
 /** Task workspace (ФТ-24): editor, run, tests, submission with explanation (ФТ-27). */
 export function WorkspacePage() {
   const { assessmentId, taskId } = useParams();
   const { t, i18n } = useTranslation();
+  const { user } = useAuth();
+  const userId = user?.id ?? 0;
   const [session, setSession] = useState<WorkSession | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [closed, setClosed] = useState(false);
@@ -40,16 +40,16 @@ export function WorkspacePage() {
       assessment_id: Number(assessmentId),
     }).then(
       (opened) => {
-        const rec = new TraceRecorder(opened.session_id, sendEvents, () => setClosed(true));
+        const rec = new TraceRecorder(userId, opened.session_id, sendEvents, () => setClosed(true));
         rec.start();
         recorder.current = rec;
-        void flushLeftovers(sendEvents, opened.session_id);
+        void flushLeftovers(sendEvents, userId, opened.session_id);
         setSession(opened);
         setCode(opened.code);
       },
       (caught: unknown) => setError(caught),
     );
-  }, [assessmentId, taskId]);
+  }, [assessmentId, taskId, userId]);
 
   useEffect(() => {
     const lost = () => recorder.current?.record("focus_lost");
@@ -246,10 +246,13 @@ function SubmitPanel({
   const [answers, setAnswers] = useState<string[]>([]);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  const polls = useRef(0);
 
   useEffect(() => {
     if (!submission || submission.status === "done" || submission.status === "error") return;
+    if (polls.current >= POLL_LIMIT) return;
     const timer = setTimeout(() => {
+      polls.current += 1;
       apiGet<SubmissionResult>(`/api/submissions/${submission.id}`).then(setSubmission, setError);
     }, POLL_MS);
     return () => clearTimeout(timer);
@@ -266,6 +269,7 @@ function SubmitPanel({
         explanation,
         ui_language: language,
       });
+      polls.current = 0;
       setSubmission(created);
       setAnswers(created.questions.map(() => ""));
     } catch (caught) {

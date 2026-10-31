@@ -202,5 +202,6 @@ export interface StudentActivity {
   large_pastes: number;
   pasted_chars: number;
   focus_lost: number;
+  late_events: number;
   last_verdicts: Record<string, Verdict | null>;
 }

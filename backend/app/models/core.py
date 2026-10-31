@@ -28,6 +28,15 @@ class WorkSession(Base):
     """One editor session of a student on a task. In an assessment only one is active."""
 
     __tablename__ = "work_sessions"
+    __table_args__ = (
+        Index(
+            "uq_work_sessions_one_active",
+            "user_id",
+            "assessment_id",
+            unique=True,
+            postgresql_where=text("closed_at IS NULL AND assessment_id IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
