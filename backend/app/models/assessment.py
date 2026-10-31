@@ -10,6 +10,7 @@ from sqlalchemy import (
     Identity,
     Integer,
     String,
+    Text,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -31,6 +32,8 @@ class Assessment(Base):
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     genai_mode: Mapped[str] = mapped_column(String(16), default=GenAiMode.FORBIDDEN.value)
+    # ФТ-16: requirements for the whole assessment, added to those of each task.
+    teacher_requirements: Mapped[str] = mapped_column(Text, default="", server_default="")
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

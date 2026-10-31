@@ -71,6 +71,27 @@ class TraceKind(StrEnum):
     EXPLANATION = "explanation"
     ANSWERS = "answers"
     SESSION_CLOSED = "session_closed"
+    AI_REQUEST = "ai_request"  # ФТ-47, written by the server
+    AI_RESPONSE = "ai_response"
+
+
+class MaterialKind(StrEnum):
+    BOOK = "book"
+    LECTURE = "lecture"
+    PROBLEMS = "problems"
+
+
+class MaterialStatus(StrEnum):
+    PENDING = "pending"  # uploaded, waiting for the antivirus and extraction
+    READY = "ready"
+    REJECTED = "rejected"  # antivirus or format check failed
+    FAILED = "failed"  # text could not be extracted
+
+
+class AiGradeStatus(StrEnum):
+    READY = "ready"
+    NEEDS_REVIEW = "needs_review"  # flagged for the teacher (invalid answer, injection, ...)
+    FAILED = "failed"
 
 
 def check_in(column: str, values: type[StrEnum]) -> str:

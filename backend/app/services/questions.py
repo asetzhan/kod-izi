@@ -7,9 +7,10 @@ the constructs found in the code.
 
 import json
 import re
+from collections.abc import Callable
 from typing import Any
 
-from app.llm.base import LLMProvider, LLMRequest
+from app.llm.base import LLMRequest, LLMResponse
 
 PROMPT_VERSION = "own-code-questions-v1"
 
@@ -74,10 +75,10 @@ def template_questions(code: str, language: str) -> list[str]:
 
 
 def generate_questions(
-    provider: LLMProvider, statement: str, code: str, language: str
+    complete: Callable[[LLMRequest], LLMResponse], statement: str, code: str, language: str
 ) -> tuple[list[str], str]:
     """Return (questions, source) where source is "llm" or "template"."""
-    response = provider.complete(
+    response = complete(
         LLMRequest(
             system=SYSTEM_PROMPT,
             data_blocks={"language": language, "statement": statement, "student_code": code},

@@ -2,7 +2,7 @@ COMPOSE := docker compose -f infra/docker-compose.yml --env-file .env
 BACKEND := $(COMPOSE) run --rm backend
 FRONTEND := $(COMPOSE) run --rm --no-deps frontend
 
-.PHONY: help env dev down logs migrate seed create-admin test test-backend test-frontend lint
+.PHONY: help env dev down logs migrate seed create-admin test test-backend test-frontend lint llm
 
 help:
 	@echo "make dev           - start all services (http://localhost:$${HTTP_PORT:-8080})"
@@ -13,6 +13,7 @@ help:
 	@echo "make create-admin EMAIL=you@example.com - create the first administrator"
 	@echo "make test          - backend and frontend tests"
 	@echo "make lint          - ruff, mypy, bandit, eslint, tsc"
+	@echo "make llm           - start the local LLM (Ollama) and download its models"
 
 env:
 	@sh infra/scripts/init-env.sh
@@ -36,6 +37,12 @@ seed: env
 create-admin: env
 	@test -n "$(EMAIL)" || (echo "Usage: make create-admin EMAIL=you@example.com" && exit 1)
 	$(BACKEND) python -m app.cli create-admin --email "$(EMAIL)"
+
+llm: env
+	$(COMPOSE) --profile llm up -d ollama
+	$(COMPOSE) exec ollama ollama pull $${OLLAMA_CHAT_MODEL:-llama3.1:8b}
+	$(COMPOSE) exec ollama ollama pull $${OLLAMA_EMBED_MODEL:-bge-m3}
+	@echo "Set LLM_PROVIDER=ollama in .env and run make dev"
 
 test: test-backend test-frontend
 

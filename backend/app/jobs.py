@@ -9,22 +9,52 @@ from rq import Callback, Queue
 from rq.job import Job
 
 from app.core.config import get_settings
-from app.core.enums import SubmissionStatus
+from app.core.enums import MaterialStatus, SubmissionStatus
 from app.db.session import get_sessionmaker
 from app.judge import get_judge
 from app.judge.judge0 import MAX_WALL_TIME_S
-from app.models import Submission
-from app.services.grading import grade_submission
+from app.llm.registry import get_provider
+from app.models import MaterialVersion, Submission
+from app.services.antivirus import ClamdScanner
+from app.services.materials import process_version
+from app.services.pipeline import run_pipeline
 
 
 def grade_job(submission_id: int) -> None:
-    """ФТ-31: grade a queued submission through Judge0."""
+    """Testing, static analysis and the preliminary AI grade of a queued submission."""
     with get_sessionmaker()() as db:
         submission = db.get(Submission, submission_id)
         if submission is None or submission.status != SubmissionStatus.QUEUED.value:
             return
-        grade_submission(db, get_judge(), submission)
+        run_pipeline(db, get_judge(), get_provider(), submission)
         db.commit()
+
+
+def material_job(version_id: int) -> None:
+    """ФТ-06: antivirus, text extraction and embeddings. Runs in the `extractor` worker."""
+    settings = get_settings()
+    with get_sessionmaker()() as db:
+        version = db.get(MaterialVersion, version_id)
+        if version is None or version.status != MaterialStatus.PENDING.value:
+            return
+        process_version(
+            db, version, ClamdScanner(settings.clamav_host, settings.clamav_port), get_provider()
+        )
+        db.commit()
+
+
+@lru_cache
+def _materials_queue() -> Queue:
+    return Queue("materials", connection=Redis.from_url(get_settings().redis_url))
+
+
+def enqueue_material(version_id: int) -> None:
+    _materials_queue().enqueue(material_job, version_id, job_timeout=600)
+
+
+def get_material_enqueue() -> Callable[[int], None]:
+    """FastAPI dependency; tests replace it with inline processing."""
+    return enqueue_material
 
 
 @lru_cache

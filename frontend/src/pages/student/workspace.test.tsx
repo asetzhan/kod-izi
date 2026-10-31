@@ -35,6 +35,7 @@ vi.mock("../../components/CodeEditor", () => ({
 const SESSION: WorkSession = {
   session_id: "11111111-1111-1111-1111-111111111111",
   assessment_id: 3,
+  genai_mode: "forbidden",
   ends_at: "2030-01-01T10:00:00Z",
   code: "",
   task: {

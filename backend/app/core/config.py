@@ -26,6 +26,16 @@ class Settings(BaseSettings):
     # Repository seed/ directory (mounted at /seed in docker).
     seed_dir: Path = Path(__file__).resolve().parents[3] / "seed"
     max_import_bytes: int = 10 * 1024 * 1024
+    # Local LLM (Q-08, Q-09).
+    ollama_url: str = "http://ollama:11434"
+    ollama_chat_model: str = "llama3.1:8b"
+    ollama_embed_model: str = "bge-m3"
+    llm_daily_quota: int = 40  # assistant and question requests per student per day
+    # Teaching materials (ФТ-06): stored outside the web root.
+    material_dir: Path = Path("/data/materials")
+    max_material_bytes: int = 50 * 1024 * 1024
+    clamav_host: str = "clamav"
+    clamav_port: int = 3310
 
 
 @lru_cache

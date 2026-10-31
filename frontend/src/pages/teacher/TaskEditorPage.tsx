@@ -29,6 +29,7 @@ const EMPTY_TASK = {
   reference_language: "cpp17",
   source_url: null as string | null,
   source_note: "",
+  teacher_requirements: "",
   tests: [] as TestCase[],
   knowledge_component_ids: [] as number[],
 };
@@ -47,6 +48,7 @@ function toForm(task: Task): TaskForm {
     reference_language: task.reference_language,
     source_url: task.source_url,
     source_note: task.source_note,
+    teacher_requirements: task.teacher_requirements,
     tests: task.tests.map(({ input, expected_output, is_hidden }) => ({
       input,
       expected_output,
@@ -188,6 +190,15 @@ function TaskEditor({
               className="code"
               value={form.reference_solution}
               onChange={(e) => set("reference_solution", e.target.value)}
+            />
+          </label>
+
+          <label>
+            {t("task.teacherRequirements")}
+            <textarea
+              rows={2}
+              value={form.teacher_requirements}
+              onChange={(e) => set("teacher_requirements", e.target.value)}
             />
           </label>
 

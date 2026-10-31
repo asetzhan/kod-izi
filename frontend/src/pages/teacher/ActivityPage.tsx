@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { useParams } from "react-router";
+import { Link, useParams } from "react-router";
 
 import type { Assessment, StudentActivity, TaskSummary } from "../../api/types";
 import { useResource } from "../../api/useResource";
@@ -46,7 +46,16 @@ export function ActivityPage() {
               <td>{row.full_name}</td>
               {assessment.data!.task_ids.map((id) => {
                 const verdict = row.last_verdicts[String(id)];
-                return <td key={id}>{verdict ? t(`verdicts.${verdict}`) : "—"}</td>;
+                const submission = row.last_submissions[String(id)];
+                return (
+                  <td key={id}>
+                    {submission ? (
+                      <Link to={`/teacher/submissions/${submission}`}>{verdict ? t(`verdicts.${verdict}`) : "…"}</Link>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                );
               })}
               <td className={row.large_pastes > 0 ? "flag" : undefined}>{row.large_pastes}</td>
               <td>{row.pasted_chars}</td>

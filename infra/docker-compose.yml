@@ -21,6 +21,12 @@ x-backend-env: &backend-env
   COOKIE_SECURE: ${COOKIE_SECURE:-true}
   DEMO_PASSWORD: ${DEMO_PASSWORD:-}
   LLM_PROVIDER: ${LLM_PROVIDER:-fake}
+  OLLAMA_URL: http://ollama:11434
+  OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-llama3.1:8b}
+  OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL:-bge-m3}
+  LLM_DAILY_QUOTA: ${LLM_DAILY_QUOTA:-40}
+  MATERIAL_DIR: /data/materials
+  CLAMAV_HOST: clamav
   JUDGE0_URL: http://judge0-server:2358
   JUDGE0_AUTHN_TOKEN: ${JUDGE0_AUTHN_TOKEN}
   REPO_ROOT: /repo
@@ -79,11 +85,12 @@ services:
       - ../backend:/app
       - ../.claude:/repo/.claude:ro
       - ../seed:/seed:ro
+      - materials:/data/materials
     command: >
       sh -c "alembic upgrade head &&
              uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
              --proxy-headers --forwarded-allow-ips=172.28.0.10"
-    networks: [edge, data, judge]
+    networks: [edge, data, judge, llm]
     depends_on:
       postgres:
         condition: service_healthy
@@ -102,11 +109,55 @@ services:
     environment: *backend-env
     volumes:
       - ../backend:/app
+      - ../seed:/seed:ro
+      - materials:/data/materials:ro
     command: sh -c 'rq worker --url "$$REDIS_URL" default'
-    networks: [data, judge] # grading calls Judge0
+    networks: [data, judge, llm] # grading calls Judge0 and the local LLM
+    mem_limit: 4g # static analysers run here too
+    pids_limit: 256
     depends_on:
       redis:
         condition: service_healthy
+
+  # Isolated processor for uploaded files (spec 14.1): antivirus, text extraction,
+  # embeddings. No internet, no web tier, no Judge0.
+  extractor:
+    build: ../backend
+    # Only what text extraction needs: no Judge0 token, no real JWT secret.
+    environment:
+      APP_ENV: ${APP_ENV:-dev}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      JWT_SECRET: extractor-does-not-issue-tokens-0000000000
+      LLM_PROVIDER: ${LLM_PROVIDER:-fake}
+      OLLAMA_URL: http://ollama:11434
+      OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL:-bge-m3}
+      MATERIAL_DIR: /data/materials
+      CLAMAV_HOST: clamav
+    mem_limit: 4g
+    pids_limit: 256
+    command: sh -c 'rq worker --url "$$REDIS_URL" materials'
+    volumes:
+      - ../backend:/app
+      - materials:/data/materials
+    networks: [data, scan, llm]
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  clamav:
+    image: clamav/clamav:1.4
+    # `egress` only for signature updates (freshclam); files arrive over `scan`.
+    networks: [scan, egress]
+
+  # Local LLM (Q-08, Q-09). Optional: `make llm` starts it and downloads the models.
+  ollama:
+    image: ollama/ollama:0.12.6
+    profiles: [llm]
+    volumes:
+      - ollama:/root/.ollama
+    # `egress` only to download models; student data reaches it over `llm`.
+    networks: [llm, egress]
 
   postgres:
     image: pgvector/pgvector:pg16
@@ -180,7 +231,16 @@ networks:
     internal: true
   judge:
     internal: true
+  llm:
+    internal: true
+  # Internet access for ClamAV signatures and Ollama models only; nothing of the
+  # application (Nginx, backend, frontend) is on this network.
+  egress: {}
+  scan:
+    internal: true
 
 volumes:
   pgdata: {}
+  materials: {}
+  ollama: {}
   judge0-db: {}

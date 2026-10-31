@@ -119,9 +119,10 @@ export function apiSend<T>(method: "POST" | "PUT" | "PATCH", path: string, body?
   });
 }
 
-export function apiUpload<T>(path: string, file: File): Promise<T> {
+export function apiUpload<T>(path: string, file: File, fields: Record<string, string> = {}): Promise<T> {
   const form = new FormData();
   form.append("file", file);
+  for (const [name, value] of Object.entries(fields)) form.append(name, value);
   return request<T>(path, { method: "POST", body: form });
 }
 

@@ -118,6 +118,7 @@ def _fill(db: DbSession, task: Task, body: TaskIn) -> None:
         "reference_solution",
         "reference_language",
         "source_note",
+        "teacher_requirements",
     ):
         setattr(task, name, getattr(body, name))
     task.source_url = str(body.source_url) if body.source_url else None

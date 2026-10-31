@@ -16,10 +16,11 @@ from sqlalchemy.orm import Session
 
 from app.api.content_schemas import StudentTaskOut
 from app.api.deps import AdminUser, CurrentUser, DbSession, RedisClient, client_ip
-from app.core.enums import SubmissionStatus, TraceKind, Verdict
+from app.core.enums import GenAiMode, SubmissionStatus, TraceKind, Verdict
 from app.jobs import get_enqueue
 from app.judge import get_judge
 from app.judge.client import JudgeClient, JudgeUnavailableError, RunStatus
+from app.llm import gateway
 from app.llm.registry import get_provider
 from app.models import (
     AppSetting,
@@ -61,7 +62,6 @@ JUDGE_JOBS_PER_MINUTE = 60  # one job = one program run in Judge0
 SUBMITS_PER_10_MIN = 10
 EVENTS_PER_MINUTE = 300
 EVENTS_PER_SESSION = 20_000
-QUESTION_REQUESTS_PER_DAY = 40
 LLM_CODE_LIMIT = 20_000
 # Offline events of a closed session are accepted for this long after closing.
 LATE_EVENTS_GRACE = timedelta(minutes=30)
@@ -113,6 +113,7 @@ class SessionOut(BaseModel):
     session_id: uuid.UUID
     task: StudentTaskOut
     assessment_id: int | None
+    genai_mode: GenAiMode
     ends_at: datetime | None
     code: str
 
@@ -135,6 +136,7 @@ def create_session(
         session_id=session.id,
         task=StudentTaskOut.build(task),
         assessment_id=body.assessment_id,
+        genai_mode=GenAiMode(assessment.genai_mode) if assessment else GenAiMode.OPEN,
         ends_at=assessment.ends_at if assessment else None,
         code=code,
     )
@@ -423,12 +425,17 @@ def submit(
     )
     db.add(submission)
     db.flush()
-    day_key = f"questions:{user.id}:{datetime.now(UTC):%Y%m%d}"
-    if _spend(redis, day_key, 1, QUESTION_REQUESTS_PER_DAY, 2 * 86400):
+    provider = get_provider()
+    try:
         questions, source = generate_questions(
-            get_provider(), task.statement_md, body.code[:LLM_CODE_LIMIT], body.ui_language
+            lambda request: gateway.call(
+                db, provider, request, purpose="questions", user_id=user.id
+            ),
+            task.statement_md,
+            body.code[:LLM_CODE_LIMIT],
+            body.ui_language,
         )
-    else:  # LLM quota used up: template questions, no LLM call
+    except gateway.QuotaExceededError:  # LLM quota used up: template questions, no LLM call
         questions, source = template_questions(body.code, body.ui_language), "template"
     db.add(
         Explanation(
@@ -580,6 +587,7 @@ class StudentActivityOut(BaseModel):
     # Events that reached the server long after they happened: worth a look.
     late_events: int
     last_verdicts: dict[int, Verdict | None]
+    last_submissions: dict[int, int | None]
 
 
 @router.get("/assessments/{assessment_id}/activity")
@@ -629,9 +637,10 @@ def assessment_activity(
             .order_by(WorkSession.started_at)
         ).all()
         verdicts: dict[int, Verdict | None] = {}
+        last_ids: dict[int, int | None] = {}
         for link in assessment.task_links:
-            last = db.scalar(
-                select(Submission.verdict)
+            last = db.execute(
+                select(Submission.verdict, Submission.id)
                 .where(
                     Submission.assessment_id == assessment_id,
                     Submission.user_id == student.id,
@@ -639,8 +648,9 @@ def assessment_activity(
                 )
                 .order_by(Submission.id.desc())
                 .limit(1)
-            )
-            verdicts[link.task_id] = Verdict(last) if last else None
+            ).first()
+            verdicts[link.task_id] = Verdict(last.verdict) if last and last.verdict else None
+            last_ids[link.task_id] = last.id if last else None
         out.append(
             StudentActivityOut(
                 user_id=student.id,
@@ -651,6 +661,7 @@ def assessment_activity(
                 focus_lost=int(focus_lost or 0),
                 late_events=int(late or 0),
                 last_verdicts=verdicts,
+                last_submissions=last_ids,
             )
         )
     return out
