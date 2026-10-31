@@ -8,6 +8,9 @@ from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
 from app.core.enums import CoursePart, GenAiMode, LevelStatus, TaskLevel, TaskStatus
 from app.models import Assessment, Course, Task, Topic
 
+# Matches the import limit (services/task_import.py, MAX_UNCOMPRESSED).
+MAX_TOTAL_TEST_CHARS = 64 * 1024 * 1024
+
 
 class LessonOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -148,6 +151,13 @@ class TaskIn(BaseModel):
     source_note: str = Field(default="", max_length=5000)
     tests: list[TestCaseIn] = Field(default_factory=list, max_length=500)
     knowledge_component_ids: list[int] = Field(default_factory=list, max_length=50)
+
+    @model_validator(mode="after")
+    def _total_test_size(self) -> Self:
+        total = sum(len(t.input) + len(t.expected_output) for t in self.tests)
+        if total > MAX_TOTAL_TEST_CHARS:
+            raise ValueError("tests are too large in total")
+        return self
 
 
 class TaskCreate(TaskIn):

@@ -225,3 +225,39 @@ def test_ft02_other_teacher_cannot_edit_assessment(
         json={"title": "Changed", **_window(0)},
     )
     assert response.status_code == 403
+
+
+def test_sec14_teacher_of_other_course_cannot_change_tasks(
+    client: TestClient, school: School, setup: dict[str, Any]
+) -> None:
+    other = login(client, school["teacher_b"].email)
+    task_id = setup["task"]["id"]
+    body = _task_body(setup["course"]["id"])
+    del body["course_id"]
+    attempts = [
+        client.put(f"/api/tasks/{task_id}", headers=other, json=body),
+        client.put(f"/api/tasks/{task_id}/level", headers=other, json={"features": FEATURES}),
+        client.post(f"/api/tasks/{task_id}/approve", headers=other),
+        client.post(f"/api/tasks/{task_id}/level-suggestion", headers=other),
+        client.post(
+            f"/api/courses/{setup['course']['id']}/tasks/import",
+            headers=other,
+            files={"file": ("x.zip", b"PK", "application/zip")},
+        ),
+        client.post("/api/tasks", headers=other, json=_task_body(setup["course"]["id"])),
+    ]
+    assert [r.status_code for r in attempts] == [403] * len(attempts)
+
+
+def test_sec14_teacher_cannot_take_student_of_another_group(
+    client: TestClient, school: School
+) -> None:
+    headers = login(client, school["teacher_a"].email)
+    response = client.post(
+        f"/api/groups/{school['group_a'].id}/students",
+        headers=headers,
+        json={"email": school["student_b"].email},
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"] == "student_not_found"
+    assert client.get(f"/api/users/{school['student_b'].id}", headers=headers).status_code == 403

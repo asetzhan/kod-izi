@@ -182,7 +182,10 @@ def list_course_groups(course_id: int, user: CurrentUser, db: DbSession) -> list
 def add_group_student(
     group_id: int, body: EmailIn, request: Request, user: CurrentUser, db: DbSession
 ) -> GroupOut:
-    """ФТ-01: the group's teacher adds an existing student account by e-mail."""
+    """ФТ-01: the group's teacher adds an existing student account by e-mail.
+
+    Unknown e-mails, non-students and students of other groups get the same answer.
+    """
     if not can_view_group(db, user, group_id):
         raise _forbidden()
     group = db.get(Group, group_id)
@@ -190,6 +193,15 @@ def add_group_student(
     if group is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="not_found")
     if student is None or not student.has_role(Role.STUDENT):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="student_not_found")
+    # A teacher must not pull another teacher's student into a group to read their data:
+    # only students without a group can be added; moving between groups is for admins.
+    in_other_group = db.scalar(
+        select(GroupMember.group_id).where(
+            GroupMember.user_id == student.id, GroupMember.group_id != group_id
+        )
+    )
+    if in_other_group is not None and not user.has_role(Role.ADMIN):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="student_not_found")
     if db.get(GroupMember, (group_id, student.id)) is None:
         db.add(GroupMember(group_id=group_id, user_id=student.id))

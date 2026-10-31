@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.enums import LevelStatus, TaskLevel
 from app.core.roles import Role
-from app.models import CourseTeacher, Task
+from app.models import AuditLog, CourseTeacher, Task
 from app.models.task import FEATURE_CODES
 from app.services.levels import RuleError, default_rule_data, get_rule, parse_rule
 from tests.conftest import MakeUser, login
@@ -126,6 +126,8 @@ def test_ft19_llm_suggestion_never_overwrites_confirmed_level(
         "rationale": "fake",
         "saved": True,
     }
+    logged = db.scalars(select(AuditLog.action).where(AuditLog.object_id == str(task.id))).all()
+    assert "task_level_suggested" in logged
     client.put(f"/api/tasks/{task.id}/level", json={"features": _scores(4)}, headers=headers)
     again = client.post(f"/api/tasks/{task.id}/level-suggestion", headers=headers).json()
     assert again["saved"] is False

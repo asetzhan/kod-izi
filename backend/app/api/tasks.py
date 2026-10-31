@@ -187,7 +187,9 @@ class LevelSuggestionOut(BaseModel):
 
 
 @router.post("/tasks/{task_id}/level-suggestion")
-def suggest_level(task_id: int, user: CurrentUser, db: DbSession) -> LevelSuggestionOut:
+def suggest_level(
+    task_id: int, request: Request, user: CurrentUser, db: DbSession
+) -> LevelSuggestionOut:
     """ФТ-19: the system proposes feature scores; a confirmed level is never overwritten."""
     task = _task_for_edit(db, user, task_id)
     rule = get_rule(db)
@@ -199,6 +201,15 @@ def suggest_level(task_id: int, user: CurrentUser, db: DbSession) -> LevelSugges
     saved = task.level_status != LevelStatus.CONFIRMED.value
     if saved:
         apply_level(task, rule, scores, LevelStatus.SUGGESTED, rationale=rationale)
+        audit.record(
+            db,
+            AuditAction.TASK_LEVEL_SUGGESTED,
+            actor_id=user.id,
+            object_type="task",
+            object_id=task.id,
+            ip=client_ip(request),
+            details={"features": scores, "level": level.value},
+        )
         db.commit()
     return LevelSuggestionOut(features=scores, level=level, rationale=rationale, saved=saved)
 

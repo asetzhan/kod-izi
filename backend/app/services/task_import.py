@@ -8,6 +8,7 @@ import io
 import json
 import re
 import zipfile
+import zlib
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any
@@ -25,6 +26,8 @@ MAX_FILES = 1000
 MAX_UNCOMPRESSED = 64 * 1024 * 1024
 MAX_TEST_BYTES = 8 * 1024 * 1024
 TEST_NAME = re.compile(r"^tests/(\d{1,3})\.(in|out)$")
+# Polygon path patterns hold exactly one %d with an optional small width.
+POLYGON_PATTERN = re.compile(r"^[\w./-]*%0?[1-9]?d[\w./-]*$")
 
 
 class TaskImportError(ValueError):
@@ -80,7 +83,10 @@ def read_zip(data: bytes) -> dict[str, bytes]:
         path = PurePosixPath(info.filename)
         if path.is_absolute() or ".." in path.parts or "\\" in info.filename:
             raise TaskImportError("unsafe_path", f"unsafe path in archive: {info.filename}")
-        files[str(path)] = archive.read(info)
+        try:
+            files[str(path)] = archive.read(info)
+        except (RuntimeError, NotImplementedError, zipfile.BadZipFile, zlib.error, EOFError):
+            raise TaskImportError("bad_archive", f"{info.filename} cannot be unpacked") from None
     return _strip_common_root(files)
 
 
@@ -146,19 +152,39 @@ def parse_native(files: dict[str, bytes]) -> TaskDraftData:
             tests=tests,
             reference_solution=_text(files, "solution.cpp") if "solution.cpp" in files else "",
             reference_language=str(config.get("reference_language", "cpp17")),
-            external_key=config.get("key"),
+            external_key=_optional_str(config, "key", 64),
             level=TaskLevel(config["level"]) if config.get("level") else None,
             features=_features(config.get("features")),
             level_rationale=str(config.get("level_rationale", "")),
-            topic_code=config.get("topic"),
+            topic_code=_optional_str(config, "topic", 16),
             knowledge_components=[str(c) for c in config.get("knowledge_components", [])],
-            source_url=config.get("source_url"),
+            source_url=_http_url(config.get("source_url")),
             source_note=str(config.get("source_note", "")),
         )
     except (TypeError, ValueError) as exc:
         raise TaskImportError("bad_config", f"invalid value in config.json: {exc}") from None
     _check_limits(draft)
     return draft
+
+
+def _optional_str(config: dict[str, Any], name: str, max_length: int) -> str | None:
+    value = config.get(name)
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value or len(value) > max_length:
+        raise TaskImportError(
+            "bad_config", f"{name} must be a string of 1..{max_length} characters"
+        )
+    return value
+
+
+def _http_url(value: object) -> str | None:
+    """Only http(s) links: the value is later shown to students as a link."""
+    if value is None:
+        return None
+    if not isinstance(value, str) or not re.match(r"^https?://[^\s]{1,490}$", value):
+        raise TaskImportError("bad_config", "source_url must be an http(s) URL")
+    return value
 
 
 def _features(raw: object) -> dict[str, int] | None:
@@ -223,10 +249,20 @@ def parse_polygon(files: dict[str, bytes]) -> TaskDraftData:
         testset = root.find("judging/testset")
     if testset is None:
         raise TaskImportError("bad_problem_xml", "problem.xml has no testset")
-    time_limit = int(_child_text(testset, "time-limit", "1000"))
-    memory_limit_kb = int(_child_text(testset, "memory-limit", str(256 * 1024 * 1024))) // 1024
+    try:
+        time_limit = int(_child_text(testset, "time-limit", "1000"))
+        memory_limit_kb = int(_child_text(testset, "memory-limit", str(256 * 1024 * 1024))) // 1024
+    except ValueError:
+        raise TaskImportError(
+            "bad_problem_xml", "time-limit or memory-limit is not a number"
+        ) from None
     input_pattern = _child_text(testset, "input-path-pattern", "tests/%02d")
     answer_pattern = _child_text(testset, "answer-path-pattern", "tests/%02d.a")
+    for pattern in (input_pattern, answer_pattern):
+        if not POLYGON_PATTERN.match(pattern):
+            raise TaskImportError(
+                "bad_problem_xml", f"unsupported test path pattern: {pattern[:50]}"
+            )
 
     tests = []
     for index, test in enumerate(testset.findall("tests/test"), start=1):

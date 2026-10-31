@@ -59,7 +59,12 @@ def _save(db: DbSession, request: Request, user: User, assessment: Assessment) -
         object_type="assessment",
         object_id=assessment.id,
         ip=client_ip(request),
-        details={"genai_mode": assessment.genai_mode},
+        details={
+            "genai_mode": assessment.genai_mode,
+            "starts_at": assessment.starts_at.isoformat(),
+            "ends_at": assessment.ends_at.isoformat(),
+            "task_ids": [link.task_id for link in assessment.task_links],
+        },
     )
     db.commit()
     db.refresh(assessment)

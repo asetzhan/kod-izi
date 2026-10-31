@@ -264,3 +264,38 @@ def test_ft18_seed_loads_experiment_tasks_as_drafts(db: Session, seeded: object)
         assert task.topic_id is not None
         assert task.kc_links
     assert Path(EXPERIMENT_DIR).is_dir()
+
+
+def test_sec14_polygon_path_pattern_cannot_exhaust_memory() -> None:
+    xml = PROBLEM_XML.replace("tests/%02d</input", "tests/%1000000000d</input")
+    with pytest.raises(TaskImportError) as error:
+        parse_package(read_zip(make_zip({**POLYGON, "problem.xml": xml})))
+    assert error.value.code == "bad_problem_xml"
+
+
+def test_sec14_archive_with_too_many_files_is_rejected() -> None:
+    files = {**NATIVE, **{f"extra/{i}.txt": "x" for i in range(1001)}}
+    with pytest.raises(TaskImportError) as error:
+        read_zip(make_zip(files))
+    assert error.value.code == "too_many_files"
+
+
+def test_sec14_zip_bomb_is_rejected() -> None:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("statement.md", "# Bomb")
+        archive.writestr("tests/01.in", b"0" * (65 * 1024 * 1024))
+    assert len(buffer.getvalue()) < 1024 * 1024
+    with pytest.raises(TaskImportError) as error:
+        read_zip(buffer.getvalue())
+    assert error.value.code == "too_large"
+
+
+@pytest.mark.parametrize(
+    "config",
+    [{"source_url": "javascript:alert(1)"}, {"key": {"x": 1}}, {"topic": ["1.3"]}],
+)
+def test_sec14_unsafe_or_malformed_config_values_are_rejected(config: dict[str, object]) -> None:
+    with pytest.raises(TaskImportError) as error:
+        parse_package(read_zip(make_zip({**NATIVE, "config.json": json.dumps(config)})))
+    assert error.value.code == "bad_config"

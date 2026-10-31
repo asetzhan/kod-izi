@@ -27,6 +27,7 @@ class AuditAction(StrEnum):
     TASK_CREATED = "task_created"
     TASK_UPDATED = "task_updated"
     TASK_IMPORTED = "task_imported"
+    TASK_LEVEL_SUGGESTED = "task_level_suggested"
     TASK_LEVEL_CONFIRMED = "task_level_confirmed"
     TASK_APPROVED = "task_approved"
     ASSESSMENT_SAVED = "assessment_saved"
