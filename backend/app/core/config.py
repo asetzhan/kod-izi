@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     llm_provider: str = "fake"
     judge0_url: str = "http://judge0-server:2358"
     judge0_authn_token: str = ""
+    # Load tests without Judge0 only: `simulated` (refused when APP_ENV=prod).
+    judge_backend: Literal["judge0", "simulated"] = "judge0"
+    simulated_judge_delay_s: float = 0.2
+    # Load tests without an RQ worker only: grade in a thread of the API process.
+    grading_inline: bool = False
     # Repository seed/ directory (mounted at /seed in docker).
     seed_dir: Path = Path(__file__).resolve().parents[3] / "seed"
     max_import_bytes: int = 10 * 1024 * 1024

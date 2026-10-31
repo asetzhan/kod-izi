@@ -150,6 +150,27 @@ services:
     # `egress` only for signature updates (freshclam); files arrive over `scan`.
     networks: [scan, egress]
 
+  # Daily encrypted backup (spec 13). `docker compose --profile backup up -d backup`.
+  backup:
+    build: ./backup
+    profiles: [backup]
+    environment:
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB}
+      BACKUP_PASSPHRASE: ${BACKUP_PASSPHRASE:-}
+      BACKUP_DIR: /backups
+      MATERIAL_DIR: /data/materials
+    volumes:
+      - backups:/backups
+      - materials:/data/materials:ro
+    command: sh -c 'while true; do backup.sh; sleep 86400; done'
+    networks: [data]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   # Local LLM (Q-08, Q-09). Optional: `make llm` starts it and downloads the models.
   ollama:
     image: ollama/ollama:0.12.6
@@ -243,4 +264,5 @@ volumes:
   pgdata: {}
   materials: {}
   ollama: {}
+  backups: {}
   judge0-db: {}

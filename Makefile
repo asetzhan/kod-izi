@@ -2,7 +2,7 @@ COMPOSE := docker compose -f infra/docker-compose.yml --env-file .env
 BACKEND := $(COMPOSE) run --rm backend
 FRONTEND := $(COMPOSE) run --rm --no-deps frontend
 
-.PHONY: help env dev down logs migrate seed create-admin test test-backend test-frontend lint llm
+.PHONY: help env dev down logs migrate seed create-admin test test-backend test-frontend lint llm backup retention
 
 help:
 	@echo "make dev           - start all services (http://localhost:$${HTTP_PORT:-8080})"
@@ -14,6 +14,8 @@ help:
 	@echo "make test          - backend and frontend tests"
 	@echo "make lint          - ruff, mypy, bandit, eslint, tsc"
 	@echo "make llm           - start the local LLM (Ollama) and download its models"
+	@echo "make backup        - make an encrypted backup now"
+	@echo "make retention     - anonymize data past the retention period (spec 14.3)"
 
 env:
 	@sh infra/scripts/init-env.sh
@@ -43,6 +45,12 @@ llm: env
 	$(COMPOSE) exec ollama ollama pull $${OLLAMA_CHAT_MODEL:-llama3.1:8b}
 	$(COMPOSE) exec ollama ollama pull $${OLLAMA_EMBED_MODEL:-bge-m3}
 	@echo "Set LLM_PROVIDER=ollama in .env and run make dev"
+
+backup: env
+	$(COMPOSE) --profile backup run --rm backup backup.sh
+
+retention: env
+	$(BACKEND) python -m app.cli retention
 
 test: test-backend test-frontend
 

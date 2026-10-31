@@ -1,5 +1,6 @@
 """Background jobs run by the RQ worker (`rq worker default`)."""
 
+import threading
 from collections.abc import Callable
 from datetime import UTC, datetime
 from functools import lru_cache
@@ -98,6 +99,16 @@ def enqueue_grading(submission_id: int) -> None:
     )
 
 
+def grade_in_thread(submission_id: int) -> None:
+    """Load tests without a worker: same job, in a thread of the API process."""
+    threading.Thread(target=grade_job, args=(submission_id,), daemon=True).start()
+
+
 def get_enqueue() -> Callable[[int], None]:
     """FastAPI dependency; tests replace it with inline grading."""
+    settings = get_settings()
+    if settings.grading_inline:
+        if settings.app_env == "prod":
+            raise RuntimeError("inline grading is for load tests, not production")
+        return grade_in_thread
     return enqueue_grading

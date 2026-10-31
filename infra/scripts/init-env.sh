@@ -13,7 +13,7 @@ fi
 umask 077
 while IFS= read -r line; do
     case "$line" in
-        *_PASSWORD= | JWT_SECRET= | JUDGE0_AUTHN_TOKEN=)
+        *_PASSWORD= | JWT_SECRET= | JUDGE0_AUTHN_TOKEN= | BACKUP_PASSPHRASE=)
             if [ "$line" = "DEMO_PASSWORD=" ]; then
                 echo "$line"
             else
