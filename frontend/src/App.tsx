@@ -11,10 +11,13 @@ import { CabinetPage } from "./pages/CabinetPage";
 import { ChooseRolePage } from "./pages/ChooseRolePage";
 import { LoginPage } from "./pages/LoginPage";
 import { AssessmentPage } from "./pages/student/AssessmentPage";
+import { ResultsPage } from "./pages/student/ResultsPage";
 import { StudentHomePage } from "./pages/student/StudentHomePage";
 import { WorkspacePage } from "./pages/student/WorkspacePage";
 import { ActivityPage } from "./pages/teacher/ActivityPage";
+import { MasteryPage } from "./pages/teacher/MasteryPage";
 import { MaterialsPage } from "./pages/teacher/MaterialsPage";
+import { ModelPanelPage } from "./pages/teacher/ModelPanelPage";
 import { RubricPage } from "./pages/teacher/RubricPage";
 import { SubmissionReviewPage } from "./pages/teacher/SubmissionReviewPage";
 import { CoursePage } from "./pages/teacher/CoursePage";
@@ -58,6 +61,18 @@ export function App() {
         <Route
           path="/teacher/courses/:courseId/tasks/new"
           element={<RequireRole role="teacher"><TaskEditorPage /></RequireRole>}
+        />
+        <Route
+          path="/teacher/courses/:courseId/model"
+          element={<RequireRole role="teacher"><ModelPanelPage /></RequireRole>}
+        />
+        <Route
+          path="/teacher/courses/:courseId/mastery"
+          element={<RequireRole role="teacher"><MasteryPage /></RequireRole>}
+        />
+        <Route
+          path="/student/results"
+          element={<RequireRole role="student"><ResultsPage /></RequireRole>}
         />
         <Route
           path="/teacher/courses/:courseId/rubric"

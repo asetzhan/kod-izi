@@ -1,5 +1,8 @@
 import { useTranslation } from "react-i18next";
+import { useState } from "react";
 import { Link, useParams } from "react-router";
+
+import { apiSend } from "../../api/client";
 
 import type { Assessment, StudentActivity, TaskSummary } from "../../api/types";
 import { useResource } from "../../api/useResource";
@@ -25,6 +28,7 @@ export function ActivityPage() {
     <section className="card">
       <h1>{assessment.data.title}</h1>
       <p className="muted">{t("activity.hint")}</p>
+      <AnalysisSettings assessmentId={Number(assessmentId)} />
       <Status loading={activity.loading} error={activity.error} />
       <table>
         <thead>
@@ -67,5 +71,47 @@ export function ActivityPage() {
         </tbody>
       </table>
     </section>
+  );
+}
+
+const OPTIONAL_DATA = [
+  "static_analysis",
+  "process_metrics",
+  "student_explanation",
+  "genai_log",
+  "book_fragments",
+] as const;
+
+/** ФТ-36: which data the AI analysis of this assessment uses. */
+function AnalysisSettings({ assessmentId }: { assessmentId: number }) {
+  const { t } = useTranslation();
+  const config = useResource<{ excluded: string[]; note: string }>(`/api/assessments/${assessmentId}/analysis`);
+  const [saved, setSaved] = useState(false);
+  if (!config.data) return null;
+  const excluded = new Set(config.data.excluded);
+
+  const toggle = async (name: string, used: boolean) => {
+    const next = new Set(excluded);
+    if (used) next.delete(name);
+    else next.add(name);
+    await apiSend("PUT", `/api/assessments/${assessmentId}/analysis`, {
+      excluded: [...next],
+      note: config.data?.note ?? "",
+    });
+    setSaved(true);
+    config.reload();
+  };
+
+  return (
+    <fieldset className="analysis-settings">
+      <legend>{t("activity.analysisData")}</legend>
+      {OPTIONAL_DATA.map((name) => (
+        <label key={name} className="checkbox">
+          <input type="checkbox" checked={!excluded.has(name)} onChange={(e) => toggle(name, e.target.checked)} />
+          {t(`activity.data.${name}`)}
+        </label>
+      ))}
+      {saved && <p role="status">{t("common.saved")}</p>}
+    </fieldset>
   );
 }

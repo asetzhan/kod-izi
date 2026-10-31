@@ -16,6 +16,9 @@ export function StudentHomePage() {
     <>
       <section className="card">
         <h1>{t("cabinet.student")}</h1>
+        <p>
+          <Link to="/student/results">{t("results.title")}</Link>
+        </p>
         <h2>{t("assessment.schedule")}</h2>
         <Status loading={assessments.loading} error={assessments.error} />
         {assessments.data?.length === 0 && <p className="muted">{t("assessment.none")}</p>}
