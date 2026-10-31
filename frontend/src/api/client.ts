@@ -10,6 +10,8 @@ export interface User {
   full_name: string;
   roles: Role[];
   is_active: boolean;
+  two_factor_enabled?: boolean;
+  consent_version?: string | null;
 }
 
 interface TokenResponse {
@@ -49,11 +51,11 @@ async function parse<T>(response: Response): Promise<T> {
   return (await response.json()) as T;
 }
 
-export async function login(email: string, password: string): Promise<User> {
+export async function login(email: string, password: string, otp?: string): Promise<User> {
   const response = await fetch("/api/auth/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify(otp ? { email, password, otp } : { email, password }),
     credentials: "same-origin",
   });
   const data = await parse<TokenResponse>(response);
@@ -124,6 +126,19 @@ export function apiUpload<T>(path: string, file: File, fields: Record<string, st
   form.append("file", file);
   for (const [name, value] of Object.entries(fields)) form.append(name, value);
   return request<T>(path, { method: "POST", body: form });
+}
+
+/** Download a file from an authorized endpoint (e.g. a CSV export). */
+export async function downloadFile(path: string, filename: string): Promise<void> {
+  let response = await authorizedFetch(path);
+  if (response.status === 401 && (await refresh())) response = await authorizedFetch(path);
+  if (!response.ok) throw new ApiError(response.status);
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 /** Error code from a 422 response with {detail: {code, message}}, if any. */

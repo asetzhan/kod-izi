@@ -2,11 +2,11 @@ import { useTranslation } from "react-i18next";
 import { useState } from "react";
 import { Link, useParams } from "react-router";
 
-import { apiSend } from "../../api/client";
+import { apiGet, apiSend, downloadFile } from "../../api/client";
 
 import type { Assessment, StudentActivity, TaskSummary } from "../../api/types";
 import { useResource } from "../../api/useResource";
-import { Status } from "../../components/Status";
+import { ErrorText, Status } from "../../components/Status";
 
 /**
  * Assessment progress for the teacher: last verdicts and integrity marks (ФТ-29).
@@ -29,6 +29,7 @@ export function ActivityPage() {
       <h1>{assessment.data.title}</h1>
       <p className="muted">{t("activity.hint")}</p>
       <AnalysisSettings assessmentId={Number(assessmentId)} />
+      <PilotData assessmentId={Number(assessmentId)} />
       <Status loading={activity.loading} error={activity.error} />
       <table>
         <thead>
@@ -113,5 +114,71 @@ function AnalysisSettings({ assessmentId }: { assessmentId: number }) {
       ))}
       {saved && <p role="status">{t("common.saved")}</p>}
     </fieldset>
+  );
+}
+
+interface Stats {
+  n: number;
+  pearson: number | null;
+  spearman: number | null;
+  mae: number | null;
+  md: number | null;
+}
+
+/** ФТ-49 (core): AI and teacher grades side by side, and their agreement (spec 16). */
+function PilotData({ assessmentId }: { assessmentId: number }) {
+  const { t } = useTranslation();
+  const [stats, setStats] = useState<Record<string, Stats> | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const run = (action: () => Promise<void>) => () => {
+    setError(null);
+    action().catch(setError);
+  };
+  const exportCsv = run(() =>
+    downloadFile(`/api/assessments/${assessmentId}/export.csv`, `assessment-${assessmentId}.csv`),
+  );
+  const loadStats = run(async () =>
+    setStats(await apiGet<Record<string, Stats>>(`/api/assessments/${assessmentId}/agreement`)),
+  );
+
+  return (
+    <div className="row">
+      <button type="button" onClick={exportCsv}>
+        {t("activity.export")}
+      </button>
+      <button type="button" onClick={loadStats}>
+        {t("activity.agreement")}
+      </button>
+      {error !== null && <ErrorText error={error} />}
+      {stats && (
+        <table aria-label={t("activity.agreement")}>
+          <thead>
+            <tr>
+              <th />
+              <th>n</th>
+              <th>Pearson</th>
+              <th>Spearman</th>
+              <th>MAE</th>
+              <th>MD</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(["S", "F", "E", "A"] as const).map((key) => {
+              const row = stats[key];
+              return (
+                <tr key={key}>
+                  <td>{key}</td>
+                  <td>{row?.n}</td>
+                  <td>{row?.pearson ?? "—"}</td>
+                  <td>{row?.spearman ?? "—"}</td>
+                  <td>{row?.mae ?? "—"}</td>
+                  <td>{row?.md ?? "—"}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+    </div>
   );
 }

@@ -8,7 +8,15 @@ import { AuthContext, type AuthState, homeFor } from "./AuthContext";
 import { RequireRole } from "./RequireRole";
 
 function userWith(...roles: Role[]): User {
-  return { id: 1, email: "u@example.com", full_name: "U", roles, is_active: true };
+  return {
+    id: 1,
+    email: "u@example.com",
+    full_name: "U",
+    roles,
+    is_active: true,
+    two_factor_enabled: true,
+    consent_version: "2026-1",
+  };
 }
 
 function renderAt(path: string, user: User | null) {
@@ -23,6 +31,16 @@ function renderAt(path: string, user: User | null) {
       <MemoryRouter initialEntries={[path]}>
         <Routes>
           <Route path="/login" element={<p>login page</p>} />
+          <Route path="/security" element={<p>security page</p>} />
+          <Route path="/consent" element={<p>consent page</p>} />
+          <Route
+            path="/student"
+            element={
+              <RequireRole role="student">
+                <p>student cabinet</p>
+              </RequireRole>
+            }
+          />
           <Route
             path="/teacher"
             element={
@@ -36,6 +54,18 @@ function renderAt(path: string, user: User | null) {
     </AuthContext.Provider>,
   );
 }
+
+describe("sec14 second factor and consent", () => {
+  it("sec14: teacher without a second factor is sent to the security page", () => {
+    renderAt("/teacher", { ...userWith("teacher"), two_factor_enabled: false });
+    expect(screen.getByText("security page")).toBeInTheDocument();
+  });
+
+  it("sec14: student without consent is sent to the consent page", () => {
+    renderAt("/student", { ...userWith("student"), consent_version: null });
+    expect(screen.getByText("consent page")).toBeInTheDocument();
+  });
+});
 
 describe("sec14 role-protected routes", () => {
   it("sec14: unauthenticated user is sent to the login page", () => {
