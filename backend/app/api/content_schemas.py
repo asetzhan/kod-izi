@@ -143,8 +143,9 @@ class TaskIn(BaseModel):
     statement_md: str = Field(min_length=1, max_length=100_000)
     input_format: str = Field(default="", max_length=10_000)
     output_format: str = Field(default="", max_length=10_000)
-    time_limit_ms: int = Field(default=1000, ge=100, le=20000)
-    memory_limit_kb: int = Field(default=262144, ge=16384, le=1048576)
+    # Upper bounds follow Judge0's MAX_CPU_TIME_LIMIT and MAX_MEMORY_LIMIT.
+    time_limit_ms: int = Field(default=1000, ge=100, le=10000)
+    memory_limit_kb: int = Field(default=262144, ge=16384, le=524288)
     reference_solution: str = Field(default="", max_length=200_000)
     reference_language: str = Field(default="cpp17", pattern="^cpp(17|20)$")
     source_url: HttpUrl | None = None

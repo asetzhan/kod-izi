@@ -146,3 +146,28 @@ td {
 .topics li {
   margin-bottom: 0.5rem;
 }
+
+.statement {
+  white-space: pre-wrap;
+}
+
+pre.io {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.4rem 0.6rem;
+  min-width: 8rem;
+  white-space: pre-wrap;
+}
+
+.run-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+td.flag {
+  color: #b42318;
+  font-weight: 600;
+}

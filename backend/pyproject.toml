@@ -21,12 +21,12 @@ dependencies = [
     "rq==3.0.0",
     "python-multipart==0.0.32",
     "defusedxml==0.7.1",
+    "httpx==0.28.1",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest==9.2.0",
-    "httpx==0.28.1",
     "fakeredis==2.40.0",
     "ruff==0.17.3",
     "mypy==2.4.1",

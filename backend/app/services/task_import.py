@@ -199,10 +199,11 @@ def _features(raw: object) -> dict[str, int] | None:
 
 
 def _check_limits(draft: TaskDraftData) -> None:
-    if not 100 <= draft.time_limit_ms <= 20000:
-        raise TaskImportError("bad_config", "time_limit_ms must be between 100 and 20000")
-    if not 16384 <= draft.memory_limit_kb <= 1048576:
-        raise TaskImportError("bad_config", "memory_limit_kb must be between 16384 and 1048576")
+    # Bounds follow Judge0's MAX_CPU_TIME_LIMIT and MAX_MEMORY_LIMIT (judge0.conf).
+    if not 100 <= draft.time_limit_ms <= 10000:
+        raise TaskImportError("bad_config", "time_limit_ms must be between 100 and 10000")
+    if not 16384 <= draft.memory_limit_kb <= 524288:
+        raise TaskImportError("bad_config", "memory_limit_kb must be between 16384 and 524288")
     if draft.reference_language not in ("cpp17", "cpp20"):
         raise TaskImportError("bad_config", "reference_language must be cpp17 or cpp20")
 

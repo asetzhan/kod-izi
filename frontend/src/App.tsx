@@ -10,7 +10,10 @@ import { Layout } from "./components/Layout";
 import { CabinetPage } from "./pages/CabinetPage";
 import { ChooseRolePage } from "./pages/ChooseRolePage";
 import { LoginPage } from "./pages/LoginPage";
+import { AssessmentPage } from "./pages/student/AssessmentPage";
 import { StudentHomePage } from "./pages/student/StudentHomePage";
+import { WorkspacePage } from "./pages/student/WorkspacePage";
+import { ActivityPage } from "./pages/teacher/ActivityPage";
 import { CoursePage } from "./pages/teacher/CoursePage";
 import { CoursesPage } from "./pages/teacher/CoursesPage";
 import { TaskEditorPage } from "./pages/teacher/TaskEditorPage";
@@ -52,6 +55,18 @@ export function App() {
         <Route
           path="/teacher/courses/:courseId/tasks/new"
           element={<RequireRole role="teacher"><TaskEditorPage /></RequireRole>}
+        />
+        <Route
+          path="/teacher/assessments/:assessmentId"
+          element={<RequireRole role="teacher"><ActivityPage /></RequireRole>}
+        />
+        <Route
+          path="/student/assessments/:assessmentId"
+          element={<RequireRole role="student"><AssessmentPage /></RequireRole>}
+        />
+        <Route
+          path="/student/assessments/:assessmentId/tasks/:taskId"
+          element={<RequireRole role="student"><WorkspacePage /></RequireRole>}
         />
         <Route path="/teacher/tasks/:taskId" element={<RequireRole role="teacher"><TaskEditorPage /></RequireRole>} />
         <Route path="*" element={<RootRedirect />} />

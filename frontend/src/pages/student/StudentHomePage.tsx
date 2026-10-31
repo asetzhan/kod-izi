@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router";
 
 import type { Assessment, Course, CourseSummary } from "../../api/types";
 import { useResource } from "../../api/useResource";
@@ -21,7 +22,12 @@ export function StudentHomePage() {
         <ul>
           {assessments.data?.map((a) => (
             <li key={a.id}>
-              {a.title}: {new Date(a.starts_at).toLocaleString()} —{" "}
+              {new Date(a.starts_at) <= new Date() ? (
+                <Link to={`/student/assessments/${a.id}`}>{a.title}</Link>
+              ) : (
+                a.title
+              )}
+              : {new Date(a.starts_at).toLocaleString()} —{" "}
               {new Date(a.ends_at).toLocaleString()} ({t(`genai.${a.genai_mode}`)})
             </li>
           ))}

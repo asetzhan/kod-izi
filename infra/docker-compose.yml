@@ -103,7 +103,7 @@ services:
     volumes:
       - ../backend:/app
     command: sh -c 'rq worker --url "$$REDIS_URL" default'
-    networks: [data]
+    networks: [data, judge] # grading calls Judge0
     depends_on:
       redis:
         condition: service_healthy
