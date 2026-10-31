@@ -2,6 +2,7 @@
 
 from datetime import timedelta
 
+import fakeredis
 from fastapi.testclient import TestClient
 from httpx import Response
 from sqlalchemy import select
@@ -12,6 +13,7 @@ from app.core.config import get_settings
 from app.core.roles import Role
 from app.core.security import create_access_token
 from app.models import AuditLog
+from app.services.rate_limit import ACCOUNT_LIMIT_FACTOR, LoginRateLimiter
 from tests.conftest import CSRF, PASSWORD, MakeUser, login
 
 
@@ -146,3 +148,13 @@ def test_sec14_unknown_refresh_token_returns_401(client: TestClient) -> None:
 def test_sec14_login_helper_returns_bearer_header(client: TestClient, make_user: MakeUser) -> None:
     make_user("s@example.com", Role.STUDENT)
     assert login(client, "s@example.com")["Authorization"].startswith("Bearer ")
+
+
+def test_sec14_account_limit_applies_across_addresses() -> None:
+    limiter = LoginRateLimiter(fakeredis.FakeRedis(), max_attempts=2, window_seconds=60)
+    allowed = [
+        limiter.register_attempt("s@example.com", f"10.0.0.{n}")
+        for n in range(2 * ACCOUNT_LIMIT_FACTOR + 1)
+    ]
+    assert allowed == [True] * (2 * ACCOUNT_LIMIT_FACTOR) + [False]
+    assert limiter.register_attempt("other@example.com", "10.0.0.1")

@@ -17,4 +17,5 @@ RUN chown -R app:app /app
 USER app
 
 EXPOSE 8000
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'"]
+# Proxy headers are trusted only where the proxy address is known (infra/docker-compose.yml).
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]

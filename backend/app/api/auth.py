@@ -81,7 +81,7 @@ def login(
     ip = client_ip(request)
     limiter = LoginRateLimiter(redis, settings.login_max_attempts, settings.login_window_seconds)
 
-    if limiter.is_blocked(email, ip):
+    if not limiter.register_attempt(email, ip):
         audit.record(
             db, AuditAction.LOGIN_FAILED, ip=ip, details={"email": email, "reason": "rate_limited"}
         )
@@ -90,7 +90,6 @@ def login(
 
     user = _backend.authenticate(db, email, body.password)
     if user is None:
-        limiter.register_failure(email, ip)
         audit.record(
             db,
             AuditAction.LOGIN_FAILED,
