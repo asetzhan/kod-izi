@@ -19,6 +19,8 @@ dependencies = [
     "pyjwt==2.15.1",
     "redis==8.1.0",
     "rq==3.0.0",
+    "python-multipart==0.0.32",
+    "defusedxml==0.7.1",
 ]
 
 [project.optional-dependencies]
@@ -55,7 +57,7 @@ plugins = ["pydantic.mypy"]
 exclude = ["migrations/"]
 
 [[tool.mypy.overrides]]
-module = ["fakeredis.*", "rq.*"]
+module = ["fakeredis.*", "rq.*", "defusedxml.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

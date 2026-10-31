@@ -39,11 +39,13 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from app.api.auth import CSRF_HEADER, CSRF_VALUE  # noqa: E402
 from app.api.deps import get_redis  # noqa: E402
+from app.core.config import get_settings  # noqa: E402
 from app.core.roles import Role  # noqa: E402
 from app.core.security import hash_password  # noqa: E402
 from app.db.session import get_db  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import Group, GroupMember, GroupTeacher, User  # noqa: E402
+from app.services.seed_content import SeedReport, seed_all  # noqa: E402
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 PASSWORD = "correct-horse-battery-staple"
@@ -142,3 +144,11 @@ def login(client: TestClient, email: str, password: str = PASSWORD) -> dict[str,
     response = client.post("/api/auth/login", json={"email": email, "password": password})
     assert response.status_code == 200, response.text
     return {"Authorization": f"Bearer {response.json()['access_token']}"}
+
+
+@pytest.fixture
+def seeded(db: Session) -> SeedReport:
+    """Course catalogue and experiment task drafts from seed/."""
+    report = seed_all(db, get_settings().seed_dir)
+    db.flush()
+    return report

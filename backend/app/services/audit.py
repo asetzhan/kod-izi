@@ -18,6 +18,19 @@ class AuditAction(StrEnum):
     GROUP_CREATED = "group_created"
     GROUP_MEMBER_ADDED = "group_member_added"
     GROUP_TEACHER_ADDED = "group_teacher_added"
+    GROUP_STUDENT_ADDED = "group_student_added"
+    COURSE_CREATED = "course_created"
+    COURSE_UPDATED = "course_updated"
+    COURSE_TEACHER_ADDED = "course_teacher_added"
+    COURSE_GROUP_ADDED = "course_group_added"
+    TOPIC_SAVED = "topic_saved"
+    TASK_CREATED = "task_created"
+    TASK_UPDATED = "task_updated"
+    TASK_IMPORTED = "task_imported"
+    TASK_LEVEL_CONFIRMED = "task_level_confirmed"
+    TASK_APPROVED = "task_approved"
+    ASSESSMENT_SAVED = "assessment_saved"
+    SETTING_CHANGED = "setting_changed"
 
 
 def record(
