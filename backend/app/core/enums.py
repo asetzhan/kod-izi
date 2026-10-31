@@ -37,5 +37,41 @@ class CoursePart(StrEnum):
     OTHER = "other"
 
 
+class Verdict(StrEnum):
+    """ФТ-31."""
+
+    OK = "OK"
+    WA = "WA"
+    TLE = "TLE"
+    MLE = "MLE"
+    RE = "RE"
+    CE = "CE"
+
+
+class SubmissionStatus(StrEnum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    DONE = "done"
+    ERROR = "error"  # the judge was unavailable; the student may submit again
+
+
+class TraceKind(StrEnum):
+    """Digital trace event kinds (ФТ-25, ФТ-29)."""
+
+    SESSION_START = "session_start"
+    SNAPSHOT = "snapshot"  # full code after a pause in typing
+    PASTE = "paste"
+    FOCUS_LOST = "focus_lost"
+    FOCUS_BACK = "focus_back"
+    COMPILE = "compile"
+    RUN = "run"
+    TEST = "test"
+    SUBMIT = "submit"
+    VERDICT = "verdict"
+    EXPLANATION = "explanation"
+    ANSWERS = "answers"
+    SESSION_CLOSED = "session_closed"
+
+
 def check_in(column: str, values: type[StrEnum]) -> str:
     return f"{column} IN ({', '.join(repr(v.value) for v in values)})"
