@@ -11,6 +11,7 @@ import type {
 } from "../../api/types";
 import { CodeEditor } from "../../components/CodeEditor";
 import { ErrorText, Status } from "../../components/Status";
+import { AssistantPanel } from "./AssistantPanel";
 import { useAuth } from "../../auth/AuthContext";
 import { flushLeftovers, sendEvents, TraceRecorder } from "../../workspace/TraceRecorder";
 
@@ -138,6 +139,7 @@ export function WorkspacePage() {
           beforeAction={() => snapshotNow(code)}
         />
       </section>
+      <AssistantPanel sessionId={session.session_id} mode={session.genai_mode} code={code} disabled={closed} />
     </>
   );
 }

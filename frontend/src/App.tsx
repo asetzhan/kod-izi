@@ -14,6 +14,9 @@ import { AssessmentPage } from "./pages/student/AssessmentPage";
 import { StudentHomePage } from "./pages/student/StudentHomePage";
 import { WorkspacePage } from "./pages/student/WorkspacePage";
 import { ActivityPage } from "./pages/teacher/ActivityPage";
+import { MaterialsPage } from "./pages/teacher/MaterialsPage";
+import { RubricPage } from "./pages/teacher/RubricPage";
+import { SubmissionReviewPage } from "./pages/teacher/SubmissionReviewPage";
 import { CoursePage } from "./pages/teacher/CoursePage";
 import { CoursesPage } from "./pages/teacher/CoursesPage";
 import { TaskEditorPage } from "./pages/teacher/TaskEditorPage";
@@ -55,6 +58,18 @@ export function App() {
         <Route
           path="/teacher/courses/:courseId/tasks/new"
           element={<RequireRole role="teacher"><TaskEditorPage /></RequireRole>}
+        />
+        <Route
+          path="/teacher/courses/:courseId/rubric"
+          element={<RequireRole role="teacher"><RubricPage /></RequireRole>}
+        />
+        <Route
+          path="/teacher/courses/:courseId/materials"
+          element={<RequireRole role="teacher"><MaterialsPage /></RequireRole>}
+        />
+        <Route
+          path="/teacher/submissions/:submissionId"
+          element={<RequireRole role="teacher"><SubmissionReviewPage /></RequireRole>}
         />
         <Route
           path="/teacher/assessments/:assessmentId"

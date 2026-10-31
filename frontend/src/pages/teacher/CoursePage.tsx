@@ -32,6 +32,12 @@ export function CoursePage() {
             </a>
           </p>
         )}
+        {course.data.can_edit && (
+          <p className="row">
+            <Link to={`/teacher/courses/${courseId}/rubric`}>{t("rubric.title")}</Link>
+            <Link to={`/teacher/courses/${courseId}/materials`}>{t("materials.title")}</Link>
+          </p>
+        )}
         <TopicList topics={course.data.topics} />
       </section>
 

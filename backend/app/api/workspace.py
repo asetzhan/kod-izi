@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.api.content_schemas import StudentTaskOut
 from app.api.deps import AdminUser, CurrentUser, DbSession, RedisClient, client_ip
-from app.core.enums import SubmissionStatus, TraceKind, Verdict
+from app.core.enums import GenAiMode, SubmissionStatus, TraceKind, Verdict
 from app.jobs import get_enqueue
 from app.judge import get_judge
 from app.judge.client import JudgeClient, JudgeUnavailableError, RunStatus
@@ -113,6 +113,7 @@ class SessionOut(BaseModel):
     session_id: uuid.UUID
     task: StudentTaskOut
     assessment_id: int | None
+    genai_mode: GenAiMode
     ends_at: datetime | None
     code: str
 
@@ -135,6 +136,7 @@ def create_session(
         session_id=session.id,
         task=StudentTaskOut.build(task),
         assessment_id=body.assessment_id,
+        genai_mode=GenAiMode(assessment.genai_mode) if assessment else GenAiMode.OPEN,
         ends_at=assessment.ends_at if assessment else None,
         code=code,
     )
@@ -585,6 +587,7 @@ class StudentActivityOut(BaseModel):
     # Events that reached the server long after they happened: worth a look.
     late_events: int
     last_verdicts: dict[int, Verdict | None]
+    last_submissions: dict[int, int | None]
 
 
 @router.get("/assessments/{assessment_id}/activity")
@@ -634,9 +637,10 @@ def assessment_activity(
             .order_by(WorkSession.started_at)
         ).all()
         verdicts: dict[int, Verdict | None] = {}
+        last_ids: dict[int, int | None] = {}
         for link in assessment.task_links:
-            last = db.scalar(
-                select(Submission.verdict)
+            last = db.execute(
+                select(Submission.verdict, Submission.id)
                 .where(
                     Submission.assessment_id == assessment_id,
                     Submission.user_id == student.id,
@@ -644,8 +648,9 @@ def assessment_activity(
                 )
                 .order_by(Submission.id.desc())
                 .limit(1)
-            )
-            verdicts[link.task_id] = Verdict(last) if last else None
+            ).first()
+            verdicts[link.task_id] = Verdict(last.verdict) if last and last.verdict else None
+            last_ids[link.task_id] = last.id if last else None
         out.append(
             StudentActivityOut(
                 user_id=student.id,
@@ -656,6 +661,7 @@ def assessment_activity(
                 focus_lost=int(focus_lost or 0),
                 late_events=int(late or 0),
                 last_verdicts=verdicts,
+                last_submissions=last_ids,
             )
         )
     return out

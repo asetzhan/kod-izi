@@ -65,6 +65,7 @@ const TASK: Task = {
   reference_language: "cpp17",
   source_url: null,
   source_note: "",
+  teacher_requirements: "",
   features: { knowledge_actions: 0, algorithm_freedom: 0, edge_cases: 1, justification: 0 },
   level_rationale: "",
   tests: [{ id: 1, position: 1, input: "4\n", expected_output: "EVEN\n", is_hidden: false }],

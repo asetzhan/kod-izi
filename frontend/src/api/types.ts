@@ -81,6 +81,7 @@ export interface Task extends TaskSummary {
   reference_language: string;
   source_url: string | null;
   source_note: string;
+  teacher_requirements: string;
   features: Record<FeatureCode, number | null>;
   level_rationale: string;
   tests: TestCase[];
@@ -151,6 +152,7 @@ export interface WorkSession {
   session_id: string;
   task: StudentTask;
   assessment_id: number | null;
+  genai_mode: GenAiMode;
   ends_at: string | null;
   code: string;
 }
@@ -204,4 +206,117 @@ export interface StudentActivity {
   focus_lost: number;
   late_events: number;
   last_verdicts: Record<string, Verdict | null>;
+  last_submissions: Record<string, number | null>;
+}
+
+// Stage 3 (backend/app/api/analysis.py).
+
+export type CriterionCode =
+  | "understanding"
+  | "algorithm"
+  | "correctness"
+  | "code_quality"
+  | "debugging"
+  | "explanation";
+
+export interface RubricCriterion {
+  code: CriterionCode;
+  name: string;
+  indicators: string;
+  data_sources: string;
+  descriptor_low: string;
+  descriptor_mid: string;
+  descriptor_high: string;
+}
+
+export interface Rubric {
+  weight_f: number;
+  weight_e: number;
+  weight_a: number;
+  component_scales: Record<"F" | "E" | "A", string>;
+  criteria: RubricCriterion[];
+}
+
+export type MaterialKind = "book" | "lecture" | "problems";
+
+export interface MaterialVersion {
+  id: number;
+  version: number;
+  filename: string;
+  mime: string;
+  size_bytes: number;
+  status: "pending" | "ready" | "rejected" | "failed";
+  error: string | null;
+  pages: number | null;
+  created_at: string;
+}
+
+export interface Material {
+  id: number;
+  course_id: number;
+  title: string;
+  author: string;
+  kind: MaterialKind;
+  versions: MaterialVersion[];
+}
+
+export interface Binding {
+  id?: number;
+  material_id?: number;
+  topic_id: number | null;
+  task_id: number | null;
+  assessment_id: number | null;
+  chapter: string;
+  page_from: number | null;
+  page_to: number | null;
+  is_assessment_basis: boolean;
+  requirements: string;
+}
+
+export interface Evidence {
+  type: "test" | "code_line" | "explanation" | "genai_log" | "book";
+  ref: string;
+  quote: string;
+}
+
+export interface AiGrade {
+  id: number;
+  submission_id: number;
+  status: "ready" | "needs_review" | "failed";
+  criteria: { code: CriterionCode; level: "low" | "mid" | "high"; evidence: Evidence[]; confidence: number }[];
+  components: { F: number | null; E: number | null; A: number | null };
+  score: number | null;
+  interpretation: string;
+  feedback: string;
+  next_step: string;
+  flags: string[];
+  review_reasons: string[];
+  model: string;
+  prompt_version: string;
+  weights: Record<string, number>;
+  fragment_ids: number[];
+  attempts: number;
+  created_at: string;
+}
+
+export interface ChunkView {
+  id: number;
+  material_id: number;
+  material_title: string;
+  version: number;
+  chapter: string;
+  page: number | null;
+  text: string;
+}
+
+export interface AssistantMessage {
+  id: number;
+  question: string;
+  answer: string;
+  blocked: boolean;
+  created_at: string;
+}
+
+export interface StaffSubmission extends SubmissionResult {
+  static_analysis?: unknown;
 }

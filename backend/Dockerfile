@@ -5,6 +5,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
+# cppcheck for static analysis (ФТ-32); clang-tidy comes from the pip package.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends cppcheck \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN useradd --create-home --uid 1000 app
 WORKDIR /app
 
