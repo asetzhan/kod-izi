@@ -28,6 +28,13 @@ from app.models.course import (
     Topic,
 )
 from app.models.group import Group, GroupMember, GroupTeacher
+from app.models.panel import (
+    ComponentEntry,
+    ComponentEntryVersion,
+    ComponentSetting,
+    Observation,
+    TeacherGrade,
+)
 from app.models.setting import AppSetting
 from app.models.task import Task, TaskKnowledgeComponent, TestCase
 from app.models.user import User, UserRole
@@ -40,6 +47,9 @@ __all__ = [
     "AssessmentTask",
     "AuditLog",
     "Chunk",
+    "ComponentEntry",
+    "ComponentEntryVersion",
+    "ComponentSetting",
     "Course",
     "CourseGroup",
     "CourseTeacher",
@@ -53,6 +63,7 @@ __all__ = [
     "Material",
     "MaterialBinding",
     "MaterialVersion",
+    "Observation",
     "RefreshToken",
     "Rubric",
     "RubricCriterion",
@@ -60,6 +71,7 @@ __all__ = [
     "SubmissionTestResult",
     "Task",
     "TaskKnowledgeComponent",
+    "TeacherGrade",
     "TestCase",
     "Topic",
     "TraceEvent",

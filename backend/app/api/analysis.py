@@ -37,6 +37,7 @@ from app.services import ai_grading, audit
 from app.services.access import can_edit_course, can_view_course
 from app.services.assistant import AssistantForbiddenError, ask
 from app.services.audit import AuditAction
+from app.services.component_fill import fill_submission
 from app.services.extract import ExtractError
 from app.services.materials import current_version, store_version
 from app.services.rubrics import CRITERIA_CODES, get_or_create_rubric
@@ -501,6 +502,8 @@ def regrade(submission_id: int, request: Request, user: CurrentUser, db: DbSessi
         raise _unprocessable("not_tested")
     try:
         record = ai_grading.grade(db, get_provider(), submission)
+        db.flush()
+        fill_submission(db, submission, record)
     except LLMUnavailableError:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, detail="llm_unavailable") from None
     audit.record(

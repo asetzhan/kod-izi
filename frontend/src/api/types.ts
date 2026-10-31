@@ -320,3 +320,86 @@ export interface AssistantMessage {
 export interface StaffSubmission extends SubmissionResult {
   static_analysis?: unknown;
 }
+
+// Stage 4 (backend/app/api/panel.py).
+
+export type EntrySource = "auto" | "teacher" | "auto_edited";
+
+export interface ComponentSummary {
+  component: number;
+  name: string;
+  auto_enabled: boolean;
+  entries: number;
+  by_source: Record<string, number>;
+  suggestions: number;
+}
+
+export interface ComponentEntry {
+  id: number;
+  component: number;
+  subject_type: string;
+  subject_id: number;
+  key: string;
+  value: unknown;
+  auto_value: unknown;
+  source: EntrySource;
+  suggestion: unknown;
+  updated_by: number | null;
+  updated_at: string;
+  versions: number;
+}
+
+export interface EntryVersion {
+  version: number;
+  value: unknown;
+  source: EntrySource;
+  author_id: number | null;
+  note: string;
+  created_at: string;
+}
+
+export interface TeacherGrade {
+  id: number;
+  submission_id: number;
+  criteria: { code: CriterionCode; level: "low" | "mid" | "high" }[];
+  components: Record<"F" | "E" | "A", number>;
+  score: number;
+  feedback: string;
+  feedback_source: "ai" | "ai_edited" | "teacher";
+  book_refs: string[];
+  next_step: string;
+  reason: string;
+  agrees_with_ai: boolean;
+  confirmed_at: string;
+}
+
+export interface Observation {
+  id: number;
+  kind: "oral_defense" | "signal_comment" | "note";
+  text: string;
+  signal: string | null;
+  criterion: CriterionCode | null;
+  level: "low" | "mid" | "high" | null;
+  created_at: string;
+}
+
+export interface StudentResult {
+  submission_id: number;
+  task_id: number;
+  criteria: { code: CriterionCode; name: string; level: "low" | "mid" | "high"; interpretation: string }[];
+  score: number;
+  feedback: string;
+  feedback_source: "ai" | "ai_edited" | "teacher";
+  book_refs: string[];
+  next_step: string;
+  confirmed_at: string;
+}
+
+export interface MasteryRow {
+  topic_id: number | null;
+  level: TaskLevel | null;
+  a: number;
+  p: number;
+  k: number | null;
+  mastered: boolean;
+}

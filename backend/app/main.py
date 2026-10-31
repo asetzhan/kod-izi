@@ -8,6 +8,7 @@ from app.api import (
     auth,
     courses,
     health,
+    panel,
     tasks,
     users,
     workspace,
@@ -34,6 +35,7 @@ def create_app() -> FastAPI:
         app_settings,
         workspace,
         analysis,
+        panel,
     ):
         app.include_router(module.router)
     return app

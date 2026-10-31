@@ -36,6 +36,10 @@ class AuditAction(StrEnum):
     MATERIAL_UPLOADED = "material_uploaded"
     MATERIAL_BOUND = "material_bound"
     AI_GRADE_REQUESTED = "ai_grade_requested"
+    COMPONENT_EDITED = "component_edited"
+    COMPONENT_GENERATED = "component_generated"
+    GRADE_CONFIRMED = "grade_confirmed"
+    OBSERVATION_ADDED = "observation_added"
 
 
 def record(

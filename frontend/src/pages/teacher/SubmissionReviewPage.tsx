@@ -6,6 +6,7 @@ import { apiGet, apiSend } from "../../api/client";
 import type { AiGrade, ChunkView, SubmissionResult } from "../../api/types";
 import { useResource } from "../../api/useResource";
 import { ErrorText, Status } from "../../components/Status";
+import { ConfirmGrade, Observations } from "./ConfirmGrade";
 
 /**
  * A submission for the teacher: tests and the preliminary AI grade with its evidence
@@ -68,6 +69,8 @@ export function SubmissionReviewPage() {
         </button>
         {error !== null && <ErrorText error={error} />}
       </section>
+      {!grades.loading && <ConfirmGrade key={latest?.id ?? "none"} submissionId={s.id} ai={latest} />}
+      <Observations submissionId={s.id} />
     </>
   );
 }

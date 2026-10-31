@@ -1,6 +1,7 @@
 """Assessments (ФТ-02): tasks, time window, GenAI mode."""
 
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import (
     BigInteger,
@@ -12,7 +13,9 @@ from sqlalchemy import (
     String,
     Text,
     func,
+    text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.enums import GenAiMode, check_in
@@ -34,6 +37,10 @@ class Assessment(Base):
     genai_mode: Mapped[str] = mapped_column(String(16), default=GenAiMode.FORBIDDEN.value)
     # ФТ-16: requirements for the whole assessment, added to those of each task.
     teacher_requirements: Mapped[str] = mapped_column(Text, default="", server_default="")
+    # ФТ-36: which data and methods the analysis of this assessment uses.
+    analysis_config: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, default=dict, server_default=text("'{}'::jsonb")
+    )
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

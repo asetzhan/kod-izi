@@ -55,6 +55,16 @@ SYSTEM_PROMPT_SUFFIX = """
 
 LANGUAGE_NAMES = {"kk": "қазақ", "ru": "орыс"}
 
+# Data the teacher may leave out of an assessment's analysis (ФТ-36). The task, rubric
+# and test results are always given.
+OPTIONAL_BLOCKS = {
+    "static_analysis",
+    "process_metrics",
+    "student_explanation",
+    "genai_log",
+    "book_fragments",
+}
+
 CriterionCode = Literal[
     "understanding", "algorithm", "correctness", "code_quality", "debugging", "explanation"
 ]
@@ -234,6 +244,10 @@ def build_request(
         "genai_log": json.dumps(genai_log(db, submission), ensure_ascii=False),
         "book_fragments": fragments_block(fragments),
     }
+    # ФТ-36: the teacher chose which data this assessment's analysis uses.
+    excluded = set((assessment.analysis_config if assessment else {}).get("excluded", []))
+    for name in excluded & OPTIONAL_BLOCKS:
+        blocks[name] = "(оқытушы бұл деректі осы бақылау жұмысының талдауына қоспады)"
     system = SYSTEM_PROMPT.replace("{feedback_language}", LANGUAGE_NAMES.get(language, "қазақ"))
     request = LLMRequest(
         system=system + SYSTEM_PROMPT_SUFFIX,
