@@ -1,5 +1,79 @@
 # «Код ізі»: Claude Code-қа арналған бастапқы пакет
 
+## Орнату және іске қосу
+
+### Не керек
+
+- Docker және Docker Compose v2 (`docker compose version` жұмыс істеуі керек);
+- Make;
+- Git.
+
+Ubuntu-да орнату:
+
+```
+sudo apt install docker.io docker-compose-v2 make git
+sudo usermod -aG docker $USER   # содан кейін жүйеден шығып, қайта кіріңіз
+```
+
+### Бірінші іске қосу
+
+```
+git clone https://github.com/asetzhan/kod-izi.git
+cd kod-izi
+make dev
+```
+
+`make dev` бірінші рет іске қосылғанда `.env.example` файлынан `.env` жасайды. Құпиясөздер мен кілттер автоматты түрде кездейсоқ мәндермен толтырылады. Содан кейін барлық сервис көтеріледі: Nginx, frontend, backend, RQ worker, PostgreSQL (pgvector-пен), Redis және Judge0. Дерекқор миграциялары өздігінен орындалады.
+
+Жүйе мына мекенжайда ашылады: http://localhost:8080 (порт `.env` ішіндегі `HTTP_PORT` айнымалысымен өзгереді).
+
+### Пайдаланушылар
+
+Жүйеде өздігінен тіркелу жоқ: пайдаланушыны әкімші қосады.
+
+```
+make create-admin EMAIL=siz@example.com   # бірінші әкімші, құпиясөзді сұрайды
+make seed                                 # тек әзірлеу үшін: төрт рөлдің демо-аккаунттары
+```
+
+`make seed` мына аккаунттарды жасайды: `student@example.com`, `student2@example.com`, `teacher@example.com`, `coach@example.com`, `admin@example.com`. Құпиясөз `.env` ішіндегі `DEMO_PASSWORD` мәні болады. Ол бос болса, жаңа құпиясөз жасалып, экранға бір рет шығарылады. Бұл команда тек `APP_ENV=dev` кезінде жұмыс істейді.
+
+### Командалар
+
+| Команда | Не істейді |
+| --- | --- |
+| `make dev` | Барлық сервисті іске қосады |
+| `make down` | Сервистерді тоқтатады |
+| `make logs` | Сервистердің логын көрсетеді |
+| `make migrate` | Alembic миграцияларын орындайды |
+| `make seed` | Демо-аккаунттарды жасайды (тек dev) |
+| `make create-admin EMAIL=...` | Бірінші әкімшіні жасайды |
+| `make test` | Backend (pytest) және frontend (vitest) тесттері |
+| `make lint` | ruff, mypy, bandit, eslint, tsc |
+
+API құжаттамасы (тек dev ортасында): http://localhost:8080/api/docs
+
+### Judge0 туралы ескерту
+
+Judge0 1.13.1 студент кодын оқшауланған ортада орындау үшін cgroup v1-ді талап етеді. Ubuntu 22.04 және одан жаңа жүйелерде әдепкі бойынша cgroup v2 қолданылады. Мұндай жүйеде Judge0 іске қосылады, бірақ кодты орындай алмайды. 0-кезеңде бұл кедергі емес, өйткені код орындау 2-кезеңде басталады. Шешімі `docs/spec/questions.md` ішіндегі Q-15 сұрағында.
+
+### Жиі кездесетін қателер
+
+- **`permission denied ... docker.sock`**: пайдаланушы `docker` тобында жоқ. `sudo usermod -aG docker $USER` командасын орындап, жүйеге қайта кіріңіз.
+- **`port is already allocated`**: 8080 порты бос емес. `.env` ішінде `HTTP_PORT` мәнін өзгертіңіз.
+- **Құпиясөзді өзгерткеннен кейін дерекқор ашылмайды**: PostgreSQL құпиясөзі тек дерекқор алғаш жасалғанда беріледі. Әзірлеу ортасында `docker compose -f infra/docker-compose.yml down -v` командасымен деректерді өшіріп, қайта бастауға болады.
+
+### Құрылым
+
+| Жол | Мазмұны |
+| --- | --- |
+| `backend/` | Python 3.12, FastAPI, SQLAlchemy, Alembic; тесттер `backend/tests/` ішінде |
+| `frontend/` | TypeScript, React, Vite; интерфейс мәтіндері `frontend/src/i18n/` ішінде |
+| `infra/` | docker compose, Nginx, Judge0 баптаулары |
+| `.claude/` | Claude Code hook-тары, ережелері және security-reviewer субагенті |
+| `.github/` | CI және Dependabot |
+
+
 Бұл пакет — жаңа репозиторийдің бастапқы мазмұны. Оны бос репозиторийге салып, Claude Code-қа кезең-кезеңімен тапсырма бересіз.
 
 ## Ішінде не бар
