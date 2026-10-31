@@ -34,7 +34,7 @@ jobs:
       TEST_DATABASE_URL: postgresql+psycopg://kodizi:kodizi@localhost:5432/kodizi_test
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
