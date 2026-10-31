@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 
-from app.api import admin, auth, health, users
+from app.api import admin, app_settings, assessments, auth, courses, health, tasks, users
 from app.core.config import get_settings
 
 
@@ -12,7 +12,7 @@ def create_app() -> FastAPI:
         redoc_url=None,
         openapi_url="/api/openapi.json" if expose_docs else None,
     )
-    for module in (health, auth, users, admin):
+    for module in (health, auth, users, admin, courses, tasks, assessments, app_settings):
         app.include_router(module.router)
     return app
 

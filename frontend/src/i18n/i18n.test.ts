@@ -11,9 +11,16 @@ function keys(tree: object, prefix = ""): string[] {
   );
 }
 
+// Plural forms differ by language (Russian has few/many, Kazakh does not).
+const PLURAL_SUFFIX = /_(zero|one|two|few|many|other)$/;
+
+function baseKeys(tree: object): string[] {
+  return [...new Set(keys(tree).map((key) => key.replace(PLURAL_SUFFIX, "")))].sort();
+}
+
 describe("sec13 interface languages", () => {
   it("sec13: kk and ru translation files have the same keys", () => {
-    expect(keys(ru).sort()).toEqual(keys(kk).sort());
+    expect(baseKeys(ru)).toEqual(baseKeys(kk));
   });
 
   it("sec13: no translation is empty", () => {

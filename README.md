@@ -36,7 +36,7 @@ make create-admin EMAIL=siz@example.com   # бірінші әкімші, құп�
 make seed                                 # тек әзірлеу үшін: төрт рөлдің демо-аккаунттары
 ```
 
-`make seed` мына аккаунттарды жасайды: `student@example.com`, `student2@example.com`, `teacher@example.com`, `coach@example.com`, `admin@example.com`. Құпиясөз `.env` ішіндегі `DEMO_PASSWORD` мәні болады. Ол бос болса, жаңа құпиясөз жасалып, экранға бір рет шығарылады. Бұл команда тек `APP_ENV=dev` кезінде жұмыс істейді.
+`make seed` курстар каталогын, білім компоненттерін және 9 эксперимент тапсырмасының жобасын жүктейді. Dev ортасында ол мына аккаунттарды да жасайды: `student@example.com`, `student2@example.com`, `teacher@example.com`, `coach@example.com`, `admin@example.com`. Құпиясөз `.env` ішіндегі `DEMO_PASSWORD` мәні болады. Ол бос болса, жаңа құпиясөз жасалып, экранға бір рет шығарылады. Бұл команда тек `APP_ENV=dev` кезінде жұмыс істейді.
 
 ### Командалар
 
@@ -46,7 +46,7 @@ make seed                                 # тек әзірлеу үшін: тө
 | `make down` | Сервистерді тоқтатады |
 | `make logs` | Сервистердің логын көрсетеді |
 | `make migrate` | Alembic миграцияларын орындайды |
-| `make seed` | Демо-аккаунттарды жасайды (тек dev) |
+| `make seed` | Курстар каталогын (Stepik сабақтары), білім компоненттерін және эксперимент тапсырмаларының жобасын жүктейді; dev ортасында демо-аккаунттарды да жасайды |
 | `make create-admin EMAIL=...` | Бірінші әкімшіні жасайды |
 | `make test` | Backend (pytest) және frontend (vitest) тесттері |
 | `make lint` | ruff, mypy, bandit, eslint, tsc |

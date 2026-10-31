@@ -20,10 +20,10 @@ interface TokenResponse {
 
 export class ApiError extends Error {
   readonly status: number;
-  readonly detail: string | undefined;
+  readonly detail: unknown;
 
-  constructor(status: number, detail?: string) {
-    super(detail ?? `HTTP ${status}`);
+  constructor(status: number, detail?: unknown) {
+    super(typeof detail === "string" ? detail : `HTTP ${status}`);
     this.status = status;
     this.detail = detail;
   }
@@ -37,14 +37,15 @@ let pendingRefresh: Promise<User | null> | null = null;
 
 async function parse<T>(response: Response): Promise<T> {
   if (!response.ok) {
-    let detail: string | undefined;
+    let detail: unknown;
     try {
-      detail = ((await response.json()) as { detail?: string }).detail;
+      detail = ((await response.json()) as { detail?: unknown }).detail;
     } catch {
       detail = undefined;
     }
     throw new ApiError(response.status, detail);
   }
+  if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
 }
 
@@ -98,10 +99,36 @@ function authorizedFetch(path: string, init: RequestInit = {}): Promise<Response
   return fetch(path, { ...init, headers, credentials: "same-origin" });
 }
 
-export async function apiGet<T>(path: string): Promise<T> {
-  let response = await authorizedFetch(path);
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  let response = await authorizedFetch(path, init);
   if (response.status === 401 && (await refresh())) {
-    response = await authorizedFetch(path);
+    response = await authorizedFetch(path, init);
   }
   return parse<T>(response);
+}
+
+export function apiGet<T>(path: string): Promise<T> {
+  return request<T>(path);
+}
+
+export function apiSend<T>(method: "POST" | "PUT" | "PATCH", path: string, body?: unknown): Promise<T> {
+  return request<T>(path, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+}
+
+export function apiUpload<T>(path: string, file: File): Promise<T> {
+  const form = new FormData();
+  form.append("file", file);
+  return request<T>(path, { method: "POST", body: form });
+}
+
+/** Error code from a 422 response with {detail: {code, message}}, if any. */
+export function errorCode(error: unknown): string | undefined {
+  if (error instanceof ApiError && error.detail && typeof error.detail === "object") {
+    return (error.detail as { code?: string }).code;
+  }
+  return error instanceof ApiError ? String(error.detail ?? "") : undefined;
 }

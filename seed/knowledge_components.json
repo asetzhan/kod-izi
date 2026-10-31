@@ -1,0 +1,86 @@
+{
+  "source": "docs/spec/03-part1-cpp-basics.md, «Студент моделіндегі білім компоненттері» бағаны. 1.1 және 1.2 тақырыптары бағаланбайды.",
+  "stepik_course_id": 363,
+  "topics": [
+    {
+      "topic": "1.3",
+      "components": [
+        {"code": "int.io", "name_kk": "Енгізу-шығару"},
+        {"code": "int.arith", "name_kk": "Бүтін арифметика, / және %"},
+        {"code": "int.types", "name_kk": "int пен long long"}
+      ]
+    },
+    {
+      "topic": "1.4",
+      "components": [
+        {"code": "cond.if_else", "name_kk": "if/else"},
+        {"code": "cond.logic", "name_kk": "Логикалық амалдар"},
+        {"code": "cond.nested", "name_kk": "Кірістірілген шарттар"}
+      ]
+    },
+    {
+      "topic": "1.5",
+      "components": [
+        {"code": "while.loop", "name_kk": "Шартты цикл"},
+        {"code": "while.counter", "name_kk": "Санауыш, жинақтауыш"},
+        {"code": "while.digits", "name_kk": "Цифрларды өңдеу"}
+      ]
+    },
+    {
+      "topic": "1.6",
+      "components": [
+        {"code": "real.double", "name_kk": "double"},
+        {"code": "real.precision", "name_kk": "Дәлдік (setprecision)"},
+        {"code": "real.rounding", "name_kk": "Дөңгелектеу"}
+      ]
+    },
+    {
+      "topic": "1.7",
+      "components": [
+        {"code": "array.vector", "name_kk": "Массив, vector"},
+        {"code": "array.traverse", "name_kk": "Өту, іздеу"},
+        {"code": "array.minmax", "name_kk": "min/max, санау"}
+      ]
+    },
+    {
+      "topic": "1.8",
+      "components": [
+        {"code": "matrix.nested_loops", "name_kk": "Кірістірілген циклдер"},
+        {"code": "matrix.ops", "name_kk": "Матрицамен жұмыс"}
+      ]
+    },
+    {
+      "topic": "1.9",
+      "components": [
+        {"code": "func.params", "name_kk": "Параметрлер (мән және сілтеме арқылы)"},
+        {"code": "func.return", "name_kk": "return"},
+        {"code": "func.recursion", "name_kk": "Рекурсияның базалық жағдайы"}
+      ]
+    },
+    {
+      "topic": "1.10",
+      "components": [
+        {"code": "str.string", "name_kk": "string"},
+        {"code": "str.char_ascii", "name_kk": "char, ASCII"},
+        {"code": "str.getline", "name_kk": "getline"}
+      ]
+    },
+    {
+      "topic": "1.11",
+      "components": [
+        {"code": "map.map", "name_kk": "map"},
+        {"code": "map.set", "name_kk": "set"},
+        {"code": "map.frequency", "name_kk": "Жиілікті санау"}
+      ]
+    },
+    {
+      "topic": "1.12",
+      "components": [
+        {"code": "stl.sort", "name_kk": "sort"},
+        {"code": "stl.lower_bound", "name_kk": "lower_bound"},
+        {"code": "stl.max_element", "name_kk": "max_element"},
+        {"code": "stl.comparator", "name_kk": "Компаратор"}
+      ]
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-"""Management commands: `python -m app.cli create-admin`, `python -m app.cli seed-demo`."""
+"""Management commands: `python -m app.cli create-admin | seed | seed-demo`."""
 
 import argparse
 import getpass
@@ -13,7 +13,8 @@ from app.core.config import get_settings
 from app.core.roles import Role
 from app.core.security import hash_password
 from app.db.session import get_sessionmaker
-from app.models import Group, GroupMember, GroupTeacher, User
+from app.models import Course, CourseGroup, CourseTeacher, Group, GroupMember, GroupTeacher, User
+from app.services.seed_content import PART1_STEPIK_ID, seed_all
 
 DEMO_USERS = [
     ("student@example.com", "Demo Student", {Role.STUDENT}),
@@ -76,6 +77,31 @@ def seed_demo() -> int:
     return 0
 
 
+def seed() -> int:
+    """`make seed`: course catalogue and draft tasks; demo accounts too when APP_ENV=dev."""
+    with get_sessionmaker()() as db:
+        report = seed_all(db, get_settings().seed_dir)
+        db.commit()
+    print(
+        f"courses {report.courses}, topics {report.topics}, lessons {report.lessons}, "
+        f"knowledge components {report.knowledge_components}, "
+        f"tasks created {report.tasks_created}, skipped {report.tasks_skipped}"
+    )
+    if get_settings().app_env != "dev":
+        return 0
+    result = seed_demo()
+    with get_sessionmaker()() as db:
+        course = db.scalar(select(Course).where(Course.stepik_course_id == PART1_STEPIK_ID))
+        teacher = db.scalar(select(User).where(User.email == "teacher@example.com"))
+        group = db.scalar(select(Group).where(Group.name == "Demo group"))
+        if course and teacher and group:
+            db.merge(CourseTeacher(course_id=course.id, user_id=teacher.id))
+            db.merge(CourseGroup(course_id=course.id, group_id=group.id))
+            db.commit()
+            print("Demo teacher and group attached to the C++ basics course.")
+    return result
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="app.cli")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -83,9 +109,12 @@ def main(argv: list[str] | None = None) -> int:
     admin.add_argument("--email", required=True)
     admin.add_argument("--full-name", default="Administrator")
     sub.add_parser("seed-demo")
+    sub.add_parser("seed")
     args = parser.parse_args(argv)
     if args.command == "create-admin":
         return create_admin(args.email, args.full_name)
+    if args.command == "seed":
+        return seed()
     return seed_demo()
 
 

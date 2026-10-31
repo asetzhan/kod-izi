@@ -9,7 +9,7 @@ help:
 	@echo "make down          - stop all services"
 	@echo "make logs          - follow service logs"
 	@echo "make migrate       - apply Alembic migrations"
-	@echo "make seed          - demo accounts for local development (APP_ENV=dev only)"
+	@echo "make seed          - course catalogue and draft tasks (+ demo accounts in dev)"
 	@echo "make create-admin EMAIL=you@example.com - create the first administrator"
 	@echo "make test          - backend and frontend tests"
 	@echo "make lint          - ruff, mypy, bandit, eslint, tsc"
@@ -31,7 +31,7 @@ migrate: env
 	$(BACKEND) alembic upgrade head
 
 seed: env
-	$(BACKEND) python -m app.cli seed-demo
+	$(BACKEND) python -m app.cli seed
 
 create-admin: env
 	@test -n "$(EMAIL)" || (echo "Usage: make create-admin EMAIL=you@example.com" && exit 1)

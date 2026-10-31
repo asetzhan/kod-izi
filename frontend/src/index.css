@@ -74,3 +74,75 @@ button[type="submit"] {
 [role="alert"] {
   color: #b42318;
 }
+
+.card + .card {
+  margin-top: 1.5rem;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.inline-form,
+.task-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+
+.inline-form label,
+.task-form label,
+.card fieldset label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+label.checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+fieldset {
+  border: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+textarea.code {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+
+.row {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.test-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto auto;
+  gap: 0.5rem;
+  align-items: end;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.topics li {
+  margin-bottom: 0.5rem;
+}

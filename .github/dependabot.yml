@@ -1,23 +1,40 @@
 # Spec 14.2: dependencies are checked automatically.
+# Major versions are not proposed automatically: the stack (Python 3.12, React 18, ...)
+# is fixed in CLAUDE.md and changes only by decision. Security updates still arrive.
 version: 2
 updates:
   - package-ecosystem: pip
     directory: /backend
     schedule:
       interval: weekly
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: npm
     directory: /frontend
     schedule:
       interval: weekly
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: docker
     directories: ["/backend", "/frontend"]
     schedule:
       interval: weekly
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: docker-compose
     directory: /infra
     schedule:
       interval: weekly
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]

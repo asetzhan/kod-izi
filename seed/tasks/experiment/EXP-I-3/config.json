@@ -1,0 +1,25 @@
+{
+  "key": "EXP-I-3",
+  "title": "Цифрларды кері шығару",
+  "level": "I",
+  "features": {
+    "knowledge_actions": 1,
+    "algorithm_freedom": 0,
+    "edge_cases": 1,
+    "justification": 0
+  },
+  "level_rationale": "while циклі мен / және % амалдары; шеттік жағдай — n = 0 және соңындағы нөлдер.",
+  "topic": "1.5",
+  "knowledge_components": [
+    "while.loop",
+    "while.digits",
+    "int.arith"
+  ],
+  "time_limit_ms": 1000,
+  "memory_limit_kb": 262144,
+  "reference_language": "cpp17",
+  "public_tests": [
+    "01"
+  ],
+  "source_note": "Диссертация, Г қосымшасы. Кіріс-шығыс форматы, шектеулер, тесттер мен эталон шешім — Claude Code жобасы, оқытушы бекітуі керек (Q-07)."
+}
