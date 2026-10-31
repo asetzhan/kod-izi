@@ -94,5 +94,13 @@ class AiGradeStatus(StrEnum):
     FAILED = "failed"
 
 
+class EntrySource(StrEnum):
+    """Spec 6: «автоматты», «оқытушы», «автоматтыдан өзгертілген»."""
+
+    AUTO = "auto"
+    TEACHER = "teacher"
+    AUTO_EDITED = "auto_edited"
+
+
 def check_in(column: str, values: type[StrEnum]) -> str:
     return f"{column} IN ({', '.join(repr(v.value) for v in values)})"

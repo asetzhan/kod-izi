@@ -15,6 +15,7 @@ from app.llm.base import LLMProvider
 from app.llm.ollama import LLMUnavailableError
 from app.models import AiGrade, Submission
 from app.services import ai_grading
+from app.services.component_fill import fill_submission
 from app.services.grading import grade_submission
 from app.services.static_analysis import analyse
 
@@ -34,6 +35,9 @@ def run_pipeline(
     submission.static_analysis = analyser(submission.code, submission.language)
     db.flush()
     try:
-        return ai_grading.grade(db, provider, submission)
+        grade = ai_grading.grade(db, provider, submission)
+        db.flush()
     except LLMUnavailableError:
-        return None  # the teacher can start the AI grade again later
+        grade = None  # the teacher can start the AI grade again later
+    fill_submission(db, submission, grade)  # components 4 and 5 (spec 6)
+    return grade
