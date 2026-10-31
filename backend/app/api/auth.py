@@ -21,6 +21,8 @@ from app.services.auth import (
     rotate_refresh_token,
 )
 from app.services.rate_limit import LoginRateLimiter
+from app.services.two_factor import has_second_factor, needs_second_factor
+from app.services.two_factor import verify as verify_totp
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -98,6 +100,19 @@ def login(
         )
         db.commit()
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="invalid_credentials")
+
+    if needs_second_factor(user) and has_second_factor(user):
+        reason = None
+        if not body.otp:
+            reason = "otp_required"
+        elif not verify_totp(str(user.totp_secret), body.otp):
+            reason = "otp_invalid"
+        if reason is not None:
+            audit.record(
+                db, AuditAction.LOGIN_FAILED, actor_id=user.id, ip=ip, details={"reason": reason}
+            )
+            db.commit()
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail=reason)
 
     limiter.reset(email, ip)
     refresh_raw = issue_refresh_token(

@@ -26,6 +26,15 @@ class User(Base):
     full_name: Mapped[str] = mapped_column(String(200))
     password_hash: Mapped[str] = mapped_column(String(255))
     is_active: Mapped[bool] = mapped_column(default=True, server_default=true())
+    # Spec 14.1: second factor (TOTP) for teachers and administrators.
+    totp_secret: Mapped[str | None] = mapped_column(String(64))
+    totp_pending_secret: Mapped[str | None] = mapped_column(String(64))
+    totp_enabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Spec 13, 14.3: consent to processing personal data (version of the text accepted).
+    consent_version: Mapped[str | None] = mapped_column(String(16))
+    consent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    consent_withdrawn_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    anonymized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     role_links: Mapped[list["UserRole"]] = relationship(

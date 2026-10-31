@@ -10,6 +10,7 @@ from rq.job import Job
 
 from app.core.config import get_settings
 from app.core.enums import MaterialStatus, SubmissionStatus
+from app.db.context import set_system
 from app.db.session import get_sessionmaker
 from app.judge import get_judge
 from app.judge.judge0 import MAX_WALL_TIME_S
@@ -23,6 +24,7 @@ from app.services.pipeline import run_pipeline
 def grade_job(submission_id: int) -> None:
     """Testing, static analysis and the preliminary AI grade of a queued submission."""
     with get_sessionmaker()() as db:
+        set_system(db)
         submission = db.get(Submission, submission_id)
         if submission is None or submission.status != SubmissionStatus.QUEUED.value:
             return
@@ -34,6 +36,7 @@ def material_job(version_id: int) -> None:
     """ФТ-06: antivirus, text extraction and embeddings. Runs in the `extractor` worker."""
     settings = get_settings()
     with get_sessionmaker()() as db:
+        set_system(db)
         version = db.get(MaterialVersion, version_id)
         if version is None or version.status != MaterialStatus.PENDING.value:
             return
@@ -65,6 +68,7 @@ def _queue() -> Queue:
 def mark_failed(submission_id: int) -> None:
     """A job that crashed or timed out must not leave the submission running forever."""
     with get_sessionmaker()() as db:
+        set_system(db)
         submission = db.get(Submission, submission_id)
         if submission is not None and submission.status in (
             SubmissionStatus.QUEUED.value,
@@ -82,6 +86,7 @@ def _on_failure(job: Job, connection: object, *exc_info: object) -> None:
 
 def enqueue_grading(submission_id: int) -> None:
     with get_sessionmaker()() as db:
+        set_system(db)
         submission = db.get(Submission, submission_id)
         tests = submission.tests_total if submission else 0
     # Each test may take up to Judge0's wall time limit plus queueing.

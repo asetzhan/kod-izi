@@ -40,6 +40,7 @@ from app.services.audit import AuditAction
 from app.services.component_fill import fill_submission
 from app.services.extract import ExtractError
 from app.services.materials import current_version, store_version
+from app.services.privacy import link_is_valid, sign_link
 from app.services.rubrics import CRITERIA_CODES, get_or_create_rubric
 from app.services.sessions import SessionError, writable_session
 
@@ -290,22 +291,59 @@ def list_materials(course_id: int, user: CurrentUser, db: DbSession) -> list[Mat
     return [m for m in out if m.versions]
 
 
-@router.get("/materials/{material_id}/file")
-def download_material(
-    material_id: int, user: CurrentUser, db: DbSession, settings: AppSettings
-) -> FileResponse:
-    """Only the course's teachers download the whole file; students see fragments (spec 9.4)."""
+class FileLink(BaseModel):
+    url: str
+    expires: int
+
+
+@router.post("/materials/{material_id}/link")
+def material_link(
+    material_id: int, request: Request, user: CurrentUser, db: DbSession, settings: AppSettings
+) -> FileLink:
+    """A short-lived signed link to the whole file, for the course's teachers (spec 14.1)."""
     material = db.get(Material, material_id)
     if material is None or not can_edit_course(db, user, material.course_id):
         raise _forbidden()
     version = current_version(material)
     if version is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="not_ready")
+    expires, signature = sign_link(
+        settings.jwt_secret, material.id, version.id, settings.file_link_ttl_seconds
+    )
+    audit.record(
+        db,
+        AuditAction.FILE_LINK_ISSUED,
+        actor_id=user.id,
+        object_type="material",
+        object_id=material.id,
+        ip=client_ip(request),
+        details={"version": version.version},
+    )
+    db.commit()
+    return FileLink(
+        url=f"/api/materials/{material.id}/file?v={version.id}&expires={expires}&sig={signature}",
+        expires=expires,
+    )
+
+
+@router.get("/materials/{material_id}/file")
+def download_material(
+    material_id: int, v: int, expires: int, sig: str, db: DbSession, settings: AppSettings
+) -> FileResponse:
+    """Only through a valid, unexpired link; students see fragments only (spec 9.4)."""
+    version = db.get(MaterialVersion, v)
+    if (
+        version is None
+        or version.material_id != material_id
+        or version.status != MaterialStatus.READY.value
+        or not link_is_valid(settings.jwt_secret, material_id, version.id, expires, sig)
+    ):
+        raise _forbidden()
     return FileResponse(
         settings.material_dir / version.stored_name,
         media_type=version.mime,
         filename=version.filename,
-        headers={"X-Content-Type-Options": "nosniff"},
+        headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store"},
         content_disposition_type="attachment",
     )
 

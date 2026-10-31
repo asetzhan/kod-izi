@@ -8,6 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from app.db.context import set_system
 from app.jobs import get_enqueue
 from app.judge import get_judge
 from app.llm.fake import FakeLLMProvider
@@ -32,6 +33,7 @@ def judge(db: Session) -> Iterator[FakeJudge]:
     fake = FakeJudge({"4\n": "EVEN\n", "7\n": "ODD\n", "-3\n": "ODD\n"})
 
     def grade_inline(submission_id: int) -> None:
+        set_system(db)  # like jobs.grade_job: background work acts for the system
         submission = db.get(Submission, submission_id)
         assert submission is not None
         run_pipeline(db, fake, FakeLLMProvider(), submission, analyser=fast_analysis)

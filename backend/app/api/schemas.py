@@ -13,6 +13,8 @@ class UserOut(BaseModel):
     full_name: str
     roles: list[Role]
     is_active: bool
+    two_factor_enabled: bool = False
+    consent_version: str | None = None
 
     @classmethod
     def from_user(cls, user: User) -> "UserOut":
@@ -22,6 +24,8 @@ class UserOut(BaseModel):
             full_name=user.full_name,
             roles=sorted(user.roles),
             is_active=user.is_active,
+            two_factor_enabled=user.totp_enabled_at is not None,
+            consent_version=None if user.consent_withdrawn_at else user.consent_version,
         )
 
 
@@ -33,6 +37,7 @@ class UserBrief(BaseModel):
 class LoginRequest(BaseModel):
     email: str = Field(max_length=254)
     password: str = Field(max_length=1024)
+    otp: str | None = Field(default=None, max_length=10)
 
 
 class TokenResponse(BaseModel):

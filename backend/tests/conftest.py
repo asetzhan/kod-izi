@@ -30,6 +30,9 @@ os.environ.update(
         "JWT_SECRET": "test-only-secret-that-is-long-enough-0123456789",
         "COOKIE_SECURE": "true",
         "LLM_PROVIDER": "fake",
+        # Turned on in the tests that check them (test_privacy.py).
+        "REQUIRE_2FA_FOR_STAFF": "false",
+        "REQUIRE_CONSENT": "false",
     }
 )
 

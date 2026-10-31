@@ -11,8 +11,10 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings, get_settings
 from app.core.roles import Role
 from app.core.security import decode_access_token
+from app.db.context import set_actor
 from app.db.session import get_db
 from app.models import User
+from app.services.two_factor import has_second_factor, needs_second_factor
 
 DbSession = Annotated[Session, Depends(get_db)]
 AppSettings = Annotated[Settings, Depends(get_settings)]
@@ -44,7 +46,18 @@ def _unauthorized() -> HTTPException:
     )
 
 
+# Reachable before the second factor is set up or consent is given.
+OPEN_PATHS = {
+    "/api/me",
+    "/api/auth/2fa/setup",
+    "/api/auth/2fa/enable",
+    "/api/consent",
+    "/api/consent/withdraw",
+}
+
+
 def get_current_user(
+    request: Request,
     db: DbSession,
     settings: AppSettings,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
@@ -58,7 +71,26 @@ def get_current_user(
     user = db.get(User, user_id)
     if user is None or not user.is_active:
         raise _unauthorized()
+    set_actor(db, user)  # row-level security sees this user from now on
+    if request.url.path not in OPEN_PATHS:
+        if (
+            settings.require_2fa_for_staff
+            and needs_second_factor(user)
+            and not has_second_factor(user)
+        ):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, detail="2fa_required")
+        if (
+            settings.require_consent
+            and user.has_role(Role.STUDENT)
+            and not is_staff_user(user)
+            and (user.consent_version != settings.consent_version or user.consent_withdrawn_at)
+        ):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, detail="consent_required")
     return user
+
+
+def is_staff_user(user: User) -> bool:
+    return user.has_role(Role.TEACHER, Role.COACH, Role.ADMIN)
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]

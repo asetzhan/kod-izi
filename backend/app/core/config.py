@@ -20,6 +20,16 @@ class Settings(BaseSettings):
     login_max_attempts: int = 5
     login_window_seconds: int = 900
     cookie_secure: bool = True
+    # Spec 14.1: teachers and administrators must use TOTP.
+    require_2fa_for_staff: bool = True
+    # Spec 14.3: personal data is kept for this many days after the pilot, then anonymized.
+    retention_days: int = 365
+    consent_version: str = "2026-1"
+    require_consent: bool = True
+    # Non-superuser role the application switches to (migration 0006); empty disables.
+    db_app_role: str = Field(default="kodizi_app", pattern=r"^([a-z_][a-z0-9_]{0,62})?$")
+    # Signed, short-lived links to material files (spec 14.1).
+    file_link_ttl_seconds: int = 300
     llm_provider: str = "fake"
     judge0_url: str = "http://judge0-server:2358"
     judge0_authn_token: str = ""

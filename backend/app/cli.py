@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.roles import Role
 from app.core.security import hash_password
+from app.db.context import set_system
 from app.db.session import get_sessionmaker
 from app.models import Course, CourseGroup, CourseTeacher, Group, GroupMember, GroupTeacher, User
 from app.services.seed_content import PART1_STEPIK_ID, seed_all
@@ -44,6 +45,7 @@ def create_admin(email: str, full_name: str) -> int:
         print("Passwords differ or are shorter than 12 characters.", file=sys.stderr)
         return 1
     with get_sessionmaker()() as db:
+        set_system(db)
         _, created = _get_or_create_user(db, email.lower(), full_name, password, {Role.ADMIN})
         if not created:
             print(f"User {email} already exists.", file=sys.stderr)
@@ -60,6 +62,7 @@ def seed_demo() -> int:
         return 1
     password = os.environ.get("DEMO_PASSWORD") or secrets.token_urlsafe(12)
     with get_sessionmaker()() as db:
+        set_system(db)
         users = {}
         for email, name, roles in DEMO_USERS:
             users[email], created = _get_or_create_user(db, email, name, password, roles)
@@ -80,6 +83,7 @@ def seed_demo() -> int:
 def seed() -> int:
     """`make seed`: course catalogue and draft tasks; demo accounts too when APP_ENV=dev."""
     with get_sessionmaker()() as db:
+        set_system(db)
         report = seed_all(db, get_settings().seed_dir)
         db.commit()
     print(
@@ -91,6 +95,7 @@ def seed() -> int:
         return 0
     result = seed_demo()
     with get_sessionmaker()() as db:
+        set_system(db)
         course = db.scalar(select(Course).where(Course.stepik_course_id == PART1_STEPIK_ID))
         teacher = db.scalar(select(User).where(User.email == "teacher@example.com"))
         group = db.scalar(select(Group).where(Group.name == "Demo group"))
