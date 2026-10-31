@@ -63,7 +63,7 @@ def _generate(client: TestClient, ws: dict[str, Any], component: int) -> dict[st
     return result
 
 
-# ФТ-07, ФТ-09, ФТ-14 --------------------------------------------------------------------------
+# ФТ-07, ФТ-09, ФТ-14 ---------------------------------------------------------------
 
 
 def test_ft09_goals_and_outcomes_are_suggested_per_topic(
@@ -192,7 +192,7 @@ def test_ft07_submission_fills_signals_and_interpretation(
     assert edit.status_code == 422
 
 
-# ФТ-36 -----------------------------------------------------------------------------------------
+# ФТ-36 ------------------------------------------------------------------------------
 
 
 def test_ft36_teacher_chooses_data_for_the_analysis(
@@ -253,7 +253,7 @@ def test_ft36_teacher_adds_own_observation(
     )
 
 
-# ФТ-03, ФТ-41, ФТ-42 ---------------------------------------------------------------------------
+# ФТ-03, ФТ-41, ФТ-42 ---------------------------------------------------------------
 
 
 def _ai_levels(db: Session, submission_id: int) -> dict[str, str]:
@@ -365,7 +365,7 @@ def test_ft41_ft42_student_gets_confirmed_levels_and_book_references(
     assert mine["next_step"] == "II деңгейдегі тапсырма"
 
 
-# ФТ-43 ----------------------------------------------------------------------------------------------
+# ФТ-43 ------------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
