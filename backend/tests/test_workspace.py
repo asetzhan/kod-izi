@@ -233,8 +233,8 @@ def test_ft25_resent_events_are_not_duplicated(client: TestClient, ws: dict[str,
     }
     first = client.post(f"/api/sessions/{sid}/events", headers=ws["student"], json=batch)
     again = client.post(f"/api/sessions/{sid}/events", headers=ws["student"], json=batch)
-    assert first.json() == {"stored": 2}
-    assert again.json() == {"stored": 0}
+    assert first.json() == {"stored": 2, "session_closed": False}
+    assert again.json() == {"stored": 0, "session_closed": False}
 
 
 def test_ft25_browser_cannot_forge_server_events(client: TestClient, ws: dict[str, Any]) -> None:
@@ -386,15 +386,22 @@ def test_sec14_only_one_active_session_in_an_assessment(
     client: TestClient, ws: dict[str, Any]
 ) -> None:
     first = _open(client, ws)
+    offline_before = datetime.now(UTC).isoformat()
     second = _open(client, ws)
-    now = datetime.now(UTC).isoformat()
-    event = {"events": [{"seq": 1, "kind": "focus_lost", "client_ts": now}]}
-    old = client.post(f"/api/sessions/{first}/events", headers=ws["student"], json=event)
-    assert old.status_code == 409 and old.json()["detail"] == "session_closed"
-    assert (
-        client.post(f"/api/sessions/{second}/events", headers=ws["student"], json=event).status_code
-        == 200
-    )
+    later = (datetime.now(UTC) + timedelta(seconds=5)).isoformat()
+
+    def send(sid: str, ts: str) -> Any:
+        event = {"events": [{"seq": 1, "kind": "focus_lost", "client_ts": ts}]}
+        return client.post(f"/api/sessions/{sid}/events", headers=ws["student"], json=event)
+
+    # The old tab cannot work any more...
+    run = client.post(f"/api/sessions/{first}/run", headers=ws["student"], json={"code": "x"})
+    assert run.status_code == 409
+    after = send(first, later)
+    assert after.status_code == 409 and after.json()["detail"] == "session_closed"
+    # ...but what it recorded before being replaced is still saved.
+    assert send(first, offline_before).json() == {"stored": 1, "session_closed": True}
+    assert send(second, later).status_code == 200
 
 
 def test_sec14_student_cannot_work_outside_own_started_assessment(

@@ -76,7 +76,7 @@ export function CoursePage() {
         <ul>
           {assessments.data?.map((a) => (
             <li key={a.id}>
-              {a.title}: {new Date(a.starts_at).toLocaleString()} —{" "}
+              <Link to={`/teacher/assessments/${a.id}`}>{a.title}</Link>: {new Date(a.starts_at).toLocaleString()} —{" "}
               {new Date(a.ends_at).toLocaleString()}, {t(`genai.${a.genai_mode}`)},{" "}
               {t("assessment.taskCount", { count: a.task_ids.length })}
             </li>

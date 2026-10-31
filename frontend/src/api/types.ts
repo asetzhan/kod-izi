@@ -107,3 +107,100 @@ export interface Assessment {
 export interface LevelRule {
   sum_to_level: { min: number; max: number; level: TaskLevel }[];
 }
+
+// Stage 2: workspace (backend/app/api/workspace.py).
+
+export type Verdict = "OK" | "WA" | "TLE" | "MLE" | "RE" | "CE";
+export type RunStatus =
+  | "finished"
+  | "compile_error"
+  | "runtime_error"
+  | "time_limit"
+  | "memory_limit"
+  | "internal_error";
+
+export interface Example {
+  position: number;
+  input: string;
+  expected_output: string;
+}
+
+export interface StudentTask {
+  id: number;
+  title: string;
+  level: TaskLevel | null;
+  statement_md: string;
+  input_format: string;
+  output_format: string;
+  time_limit_ms: number;
+  memory_limit_kb: number;
+  source_url: string | null;
+  examples: Example[];
+}
+
+export interface StudentAssessment {
+  id: number;
+  title: string;
+  starts_at: string;
+  ends_at: string;
+  genai_mode: GenAiMode;
+  tasks: StudentTask[];
+}
+
+export interface WorkSession {
+  session_id: string;
+  task: StudentTask;
+  assessment_id: number | null;
+  ends_at: string | null;
+  code: string;
+}
+
+export interface RunOutput {
+  status: RunStatus;
+  stdout: string;
+  stderr: string;
+  compile_output: string;
+  time_ms: number | null;
+  memory_kb: number | null;
+}
+
+export interface TestRun {
+  position: number;
+  verdict: Verdict;
+  input: string;
+  expected_output: string;
+  actual_output: string;
+  time_ms: number | null;
+}
+
+export interface TestsOutput {
+  compile_output: string;
+  results: TestRun[];
+}
+
+export interface SubmissionResult {
+  id: number;
+  task_id: number;
+  assessment_id: number | null;
+  status: "queued" | "running" | "done" | "error";
+  verdict: Verdict | null;
+  tests_passed: number;
+  tests_total: number;
+  max_time_ms: number | null;
+  max_memory_kb: number | null;
+  compile_output: string;
+  results: { position: number; is_hidden: boolean; verdict: Verdict }[];
+  created_at: string;
+  explanation: string | null;
+  questions: { question: string; answer: string | null }[];
+}
+
+export interface StudentActivity {
+  user_id: number;
+  full_name: string;
+  sessions: string[];
+  large_pastes: number;
+  pasted_chars: number;
+  focus_lost: number;
+  last_verdicts: Record<string, Verdict | null>;
+}

@@ -40,6 +40,7 @@ from app.services.grading import run_request, run_tests
 from app.services.questions import generate_questions
 from app.services.sessions import SessionError, latest_code, open_session, writable_session
 from app.services.trace import (
+    CLIENT_KINDS,
     INTEGRITY_KEY,
     ClientEvent,
     IntegritySettings,
@@ -134,22 +135,40 @@ class EventBatch(BaseModel):
 @router.post("/sessions/{session_id}/events")
 def post_events(
     session_id: uuid.UUID, body: EventBatch, user: CurrentUser, db: DbSession
-) -> dict[str, int]:
-    """Browser events (snapshots, pastes, focus). Resending a batch is safe."""
-    session = _writable(db, user, session_id)
+) -> dict[str, Any]:
+    """Browser events (snapshots, pastes, focus). Resending a batch is safe.
+
+    Events kept in the browser while offline may arrive after the session was closed
+    (replaced by a new tab, or the assessment ended). Those that happened before the
+    closing time are still stored, so no part of the trace is lost; later ones are refused.
+    """
+    session = db.get(WorkSession, session_id)
+    if session is None or session.user_id != user.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="forbidden")
     for event in body.events:
-        if event.kind not in (
-            TraceKind.SNAPSHOT,
-            TraceKind.PASTE,
-            TraceKind.FOCUS_LOST,
-            TraceKind.FOCUS_BACK,
-        ):
+        if event.kind not in CLIENT_KINDS:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail="kind_not_allowed")
         if len(str(event.payload)) > MAX_CODE + 1000:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail="event_too_large")
-    stored = ingest_client_events(db, session, body.events)
+    deadline = _closing_time(db, session)
+    events = body.events
+    if deadline is not None:
+        events = [e for e in events if e.client_ts <= deadline]
+        if not events:
+            raise HTTPException(status.HTTP_409_CONFLICT, detail="session_closed")
+    stored = ingest_client_events(db, session, events)
     db.commit()
-    return {"stored": stored}
+    return {"stored": stored, "session_closed": deadline is not None}
+
+
+def _closing_time(db: Session, session: WorkSession) -> datetime | None:
+    """When the session stopped accepting new work, if it has."""
+    times = [session.closed_at] if session.closed_at else []
+    if session.assessment_id is not None:
+        assessment = db.get(Assessment, session.assessment_id)
+        if assessment is not None and datetime.now(UTC) > assessment.ends_at:
+            times.append(assessment.ends_at)
+    return min(times) if times else None
 
 
 class RunIn(BaseModel):
