@@ -30,6 +30,8 @@ class User(Base):
     totp_secret: Mapped[str | None] = mapped_column(String(64))
     totp_pending_secret: Mapped[str | None] = mapped_column(String(64))
     totp_enabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Last accepted TOTP time step: a code is accepted only once.
+    totp_last_step: Mapped[int | None] = mapped_column(BigInteger)
     # Spec 13, 14.3: consent to processing personal data (version of the text accepted).
     consent_version: Mapped[str | None] = mapped_column(String(16))
     consent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

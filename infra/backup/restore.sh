@@ -15,8 +15,16 @@ decrypt() {
 }
 
 SUMS="$(dirname "$DB_FILE")/kodizi-$(basename "$DB_FILE" | sed 's/^kodizi-db-//; s/\.dump\.enc$//').sha256"
-if [ -f "$SUMS" ]; then
-    (cd "$(dirname "$DB_FILE")" && sha256sum --check --ignore-missing "$(basename "$SUMS")")
+if [ ! -f "$SUMS" ]; then
+    echo "checksum file $SUMS is missing" >&2
+    exit 1
+fi
+(cd "$(dirname "$DB_FILE")" && sha256sum --check --ignore-missing "$(basename "$SUMS")")
+
+# Restoring over the live database needs an explicit confirmation.
+if [ "${PGDATABASE:-}" = "${POSTGRES_DB:-}" ] && [ "${RESTORE_FORCE:-}" != "1" ]; then
+    echo "refusing to overwrite the live database $PGDATABASE; set RESTORE_FORCE=1" >&2
+    exit 1
 fi
 
 # Grants in the dump refer to the application role (row-level security, migration 0006).

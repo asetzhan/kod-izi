@@ -12,17 +12,19 @@ from typing import Any
 import pyotp
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine, text
+from pydantic import ValidationError
+from sqlalchemy import Engine, select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
-from app.core.config import get_settings
+from app.api.auth import REFRESH_COOKIE
+from app.core.config import Settings, get_settings
 from app.core.roles import Role
 from app.db.context import set_actor, set_system
-from app.models import User
+from app.models import AuditLog, User
 from app.services.privacy import apply_retention
 from app.services.research import agreement, mean_difference, pearson, spearman
-from tests.conftest import PASSWORD, MakeUser, School, login
+from tests.conftest import CSRF, PASSWORD, MakeUser, School, login
 from tests.workspace_helpers import _open, _submit
 
 # Second factor (spec 14.1) ----------------------------------------------------------------
@@ -51,18 +53,98 @@ def test_sec14_teacher_must_set_up_second_factor(
 
     setup = client.post("/api/auth/2fa/setup", headers=headers).json()
     assert setup["otpauth_uri"].startswith("otpauth://totp/")
-    wrong = client.post("/api/auth/2fa/enable", headers=headers, json={"code": "000000"})
-    assert wrong.status_code == 422
-    code = pyotp.TOTP(setup["secret"]).now()
-    assert (
-        client.post("/api/auth/2fa/enable", headers=headers, json={"code": code}).status_code == 200
-    )
+    totp = pyotp.TOTP(setup["secret"])
+    enable = "/api/auth/2fa/enable"
+    wrong = client.post(enable, headers=headers, json={"code": "000000", "password": PASSWORD})
+    assert wrong.json()["detail"] == "otp_invalid"
+    no_password = client.post(enable, headers=headers, json={"code": totp.now(), "password": "x"})
+    assert no_password.json()["detail"] == "invalid_password"
+    ok = client.post(enable, headers=headers, json={"code": totp.now(), "password": PASSWORD})
+    assert ok.status_code == 200
     assert client.get("/api/courses", headers=headers).status_code == 200
 
     assert _login(client, "t@example.com").json()["detail"] == "otp_required"
     assert _login(client, "t@example.com", "123456").json()["detail"] == "otp_invalid"
-    ok = _login(client, "t@example.com", pyotp.TOTP(setup["secret"]).now())
-    assert ok.status_code == 200
+    # The code used to enable is spent; the next 30-second step is still accepted.
+    assert _login(client, "t@example.com", totp.now()).json()["detail"] == "otp_invalid"
+    next_code = totp.at(datetime.now(UTC) + timedelta(seconds=30))
+    assert _login(client, "t@example.com", next_code).status_code == 200
+
+
+@pytest.mark.usefixtures("strict")
+def test_sec14_totp_code_cannot_be_replayed(client: TestClient, make_user: MakeUser) -> None:
+    teacher = make_user("t@example.com", Role.TEACHER)
+    secret = pyotp.random_base32()
+    teacher.totp_secret, teacher.totp_enabled_at = secret, datetime.now(UTC)
+    code = pyotp.TOTP(secret).now()
+    assert _login(client, "t@example.com", code).status_code == 200
+    assert _login(client, "t@example.com", code).json()["detail"] == "otp_invalid"
+
+
+@pytest.mark.usefixtures("strict")
+def test_sec14_enabling_second_factor_signs_out_password_only_sessions(
+    client: TestClient, make_user: MakeUser
+) -> None:
+    make_user("t@example.com", Role.TEACHER)
+    headers = login(client, "t@example.com")
+    old_refresh = client.cookies[REFRESH_COOKIE]
+    secret = client.post("/api/auth/2fa/setup", headers=headers).json()["secret"]
+    client.post(
+        "/api/auth/2fa/enable",
+        headers=headers,
+        json={"code": pyotp.TOTP(secret).now(), "password": PASSWORD},
+    )
+    client.cookies.clear()
+    refreshed = client.post(
+        "/api/auth/refresh", headers={**CSRF, "Cookie": f"{REFRESH_COOKIE}={old_refresh}"}
+    )
+    assert refreshed.status_code == 401
+
+
+def test_sec14_students_cannot_set_up_a_second_factor(
+    client: TestClient, make_user: MakeUser
+) -> None:
+    make_user("s@example.com", Role.STUDENT)
+    headers = login(client, "s@example.com")
+    response = client.post("/api/auth/2fa/setup", headers=headers)
+    assert response.status_code == 403 and response.json()["detail"] == "2fa_not_applicable"
+
+
+def test_sec14_production_refuses_unsafe_switches(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in (
+        "REQUIRE_2FA_FOR_STAFF",
+        "REQUIRE_CONSENT",
+        "DB_APP_ROLE",
+        "JUDGE_BACKEND",
+        "GRADING_INLINE",
+        "COOKIE_SECURE",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    base: dict[str, Any] = {
+        "app_env": "prod",
+        "database_url": "postgresql+psycopg://x@/y",
+        "redis_url": "redis://r",
+        "jwt_secret": "s" * 40,
+    }
+    Settings.model_validate(base)
+    for switch in (
+        {"require_2fa_for_staff": False},
+        {"require_consent": False},
+        {"db_app_role": ""},
+        {"judge_backend": "simulated"},
+        {"grading_inline": True},
+        {"cookie_secure": False},
+    ):
+        with pytest.raises(ValidationError, match="APP_ENV=prod"):
+            Settings.model_validate({**base, **switch})
+    Settings.model_validate({**base, "app_env": "dev", "grading_inline": True})
+
+
+def test_sec14_failed_login_is_audited_without_the_address(client: TestClient, db: Session) -> None:
+    client.post("/api/auth/login", json={"email": "who@example.com", "password": "bad-password"})
+    entry = db.scalar(select(AuditLog).where(AuditLog.action == "login_failed"))
+    assert entry is not None and "who@example.com" not in str(entry.details)
+    assert entry.details["email_hash"]
 
 
 @pytest.mark.usefixtures("strict")
@@ -266,7 +348,7 @@ def test_ft49_agreement_statistics() -> None:
 
 
 def test_ft49_export_uses_pseudonyms_and_both_grades(
-    client: TestClient, ws: dict[str, Any], school: School
+    client: TestClient, ws: dict[str, Any], school: School, db: Session
 ) -> None:
     result = _submit(client, ws, _open(client, ws))
     client.post(
@@ -302,9 +384,18 @@ def test_ft49_export_uses_pseudonyms_and_both_grades(
     ).json()
     assert stats["S"]["n"] == 1 and stats["S"]["mae"] == 0.0
     assert stats["baseline"] == {"mae": 7.34, "pearson": 0.647, "model": "Claude"}
+    assert "submission_id" not in row
     assert (
         client.get(
             f"/api/assessments/{ws['assessment']['id']}/export.csv", headers=ws["student"]
         ).status_code
         == 403
     )
+
+    # 14.3: a student who withdrew consent is left out of the research data.
+    student.consent_withdrawn_at = datetime.now(UTC)
+    db.flush()
+    after = client.get(
+        f"/api/assessments/{ws['assessment']['id']}/export.csv", headers=ws["teacher"]
+    )
+    assert list(csv.DictReader(io.StringIO(after.text))) == []

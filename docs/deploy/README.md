@@ -93,6 +93,8 @@ docker compose -f infra/docker-compose.yml --env-file .env --profile backup run 
   -e PGDATABASE=kodizi_restore backup restore.sh /backups/kodizi-db-<уақыт>.dump.enc /backups/kodizi-files-<уақыт>.tar.enc
 ```
 
+Скрипт `.sha256` файлы жоқ болса тоқтайды. Негізгі дерекқордың (`POSTGRES_DB`) үстіне жазу үшін `-e RESTORE_FORCE=1` қосу керек, әйтпесе скрипт бас тартады.
+
 Қалпына келтіру **тоқсан сайын** бөлек дерекқорға сыналады (14.1). Сынақтың автоматтандырылған нұсқасы: `backend/tests/test_backup_restore.py`. Ол көшірме жасап, оны қалпына келтіреді де, кестелерді, RLS-ті, рұқсаттар мен файлдарды салыстырады.
 
 ## 5. Дербес деректер

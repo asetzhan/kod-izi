@@ -63,8 +63,8 @@ server {
 
     root /usr/share/nginx/html;
     location /assets/ {
+        # No add_header here: it would drop the server-level security headers.
         expires 30d;
-        add_header Cache-Control "public, immutable";
     }
     location / {
         try_files $uri /index.html;

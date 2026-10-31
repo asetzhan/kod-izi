@@ -15,14 +15,15 @@ from sqlalchemy import select
 
 from app.api.deps import AdminUser, AppSettings, CurrentUser, DbSession, client_ip
 from app.api.schemas import UserOut
+from app.core.security import verify_password
 from app.models import AiGrade, Assessment, Submission, TeacherGrade, User
 from app.services import audit
 from app.services.access import can_edit_course
 from app.services.audit import AuditAction
-from app.services.privacy import anonymize
+from app.services.privacy import anonymize, revoke_sessions
 from app.services.research import agreement, pseudonym
 from app.services.rubrics import CRITERIA_CODES
-from app.services.two_factor import new_secret, provisioning_uri, verify
+from app.services.two_factor import accept, needs_second_factor, new_secret, provisioning_uri
 
 router = APIRouter(prefix="/api", tags=["privacy"])
 
@@ -38,6 +39,8 @@ class TwoFactorSetup(BaseModel):
 @router.post("/auth/2fa/setup")
 def setup_two_factor(user: CurrentUser, db: DbSession) -> TwoFactorSetup:
     """A new secret for the authenticator app; it works only after `enable`."""
+    if not needs_second_factor(user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="2fa_not_applicable")
     if user.totp_enabled_at is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, detail="2fa_already_enabled")
     secret = new_secret()
@@ -46,17 +49,26 @@ def setup_two_factor(user: CurrentUser, db: DbSession) -> TwoFactorSetup:
     return TwoFactorSetup(secret=secret, otpauth_uri=provisioning_uri(user, secret))
 
 
-class CodeIn(BaseModel):
+class EnableIn(BaseModel):
     code: str = Field(min_length=6, max_length=10)
+    # Re-entered so a stolen access token alone cannot bind an attacker's authenticator.
+    password: str = Field(min_length=1, max_length=256)
 
 
 @router.post("/auth/2fa/enable")
-def enable_two_factor(body: CodeIn, request: Request, user: CurrentUser, db: DbSession) -> UserOut:
-    if user.totp_pending_secret is None or not verify(user.totp_pending_secret, body.code):
+def enable_two_factor(
+    body: EnableIn, request: Request, user: CurrentUser, db: DbSession
+) -> UserOut:
+    """Turns the factor on and signs out every session opened with the password alone."""
+    if not verify_password(user.password_hash, body.password):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail="invalid_password")
+    pending = user.totp_pending_secret
+    if pending is None or not accept(user, pending, body.code):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail="otp_invalid")
     user.totp_secret = user.totp_pending_secret
     user.totp_pending_secret = None
     user.totp_enabled_at = datetime.now(UTC)
+    revoke_sessions(db, user.id)
     audit.record(
         db,
         AuditAction.TWO_FACTOR_ENABLED,
@@ -76,7 +88,8 @@ def reset_two_factor(user_id: int, request: Request, admin: AdminUser, db: DbSes
     if user is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="not_found")
     user.totp_secret = user.totp_pending_secret = None
-    user.totp_enabled_at = None
+    user.totp_enabled_at = user.totp_last_step = None
+    revoke_sessions(db, user.id)
     audit.record(
         db,
         AuditAction.TWO_FACTOR_RESET,
@@ -182,10 +195,20 @@ def anonymize_user(user_id: int, request: Request, admin: AdminUser, db: DbSessi
 
 
 def _rows(db: DbSession, assessment: Assessment, secret: str) -> list[dict[str, Any]]:
-    """One row per submission that has both an AI grade and a teacher's grade."""
+    """One row per submission with a teacher's grade.
+
+    Students who withdrew consent or were anonymized are left out (spec 14.3); the
+    submission id is not exported, so the pseudonym cannot be traced back in the platform."""
     rows = []
     submissions = db.scalars(
-        select(Submission).where(Submission.assessment_id == assessment.id).order_by(Submission.id)
+        select(Submission)
+        .join(User, User.id == Submission.user_id)
+        .where(
+            Submission.assessment_id == assessment.id,
+            User.consent_withdrawn_at.is_(None),
+            User.anonymized_at.is_(None),
+        )
+        .order_by(Submission.id)
     )
     for submission in submissions:
         teacher = db.scalar(
@@ -201,7 +224,6 @@ def _rows(db: DbSession, assessment: Assessment, secret: str) -> list[dict[str, 
         row: dict[str, Any] = {
             "student": pseudonym(submission.user_id, secret),
             "task_id": submission.task_id,
-            "submission_id": submission.id,
             "verdict": submission.verdict,
             "ai_status": ai.status if ai else "",
             "ai_model": ai.model if ai else "",
@@ -237,7 +259,7 @@ def export_csv(
     assessment = _assessment_for_teacher(db, user, assessment_id)
     rows = _rows(db, assessment, settings.jwt_secret)
     buffer = io.StringIO()
-    columns = list(rows[0]) if rows else ["student", "task_id", "submission_id"]
+    columns = list(rows[0]) if rows else ["student", "task_id"]
     writer = csv.DictWriter(buffer, fieldnames=columns)
     writer.writeheader()
     writer.writerows(rows)

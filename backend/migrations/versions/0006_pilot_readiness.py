@@ -43,6 +43,8 @@ def _rls_up() -> None:
     )
     # Append-only tables: the application may only add rows (the trigger stays as well).
     op.execute(f"REVOKE UPDATE, DELETE, TRUNCATE ON audit_log, trace_events FROM {APP_ROLE}")
+    # Only migrations (run as the owner) move the schema version.
+    op.execute(f"REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON alembic_version FROM {APP_ROLE}")
     op.execute(FUNCTIONS)
     for table in OWN_ROWS:
         op.execute(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY")
@@ -91,6 +93,7 @@ def upgrade() -> None:
     op.add_column("users", sa.Column("totp_secret", sa.String(length=64), nullable=True))
     op.add_column("users", sa.Column("totp_pending_secret", sa.String(length=64), nullable=True))
     op.add_column("users", sa.Column("totp_enabled_at", sa.DateTime(timezone=True), nullable=True))
+    op.add_column("users", sa.Column("totp_last_step", sa.BigInteger(), nullable=True))
     op.add_column("users", sa.Column("consent_version", sa.String(length=16), nullable=True))
     op.add_column("users", sa.Column("consent_at", sa.DateTime(timezone=True), nullable=True))
     op.add_column(
@@ -106,6 +109,7 @@ def downgrade() -> None:
     op.drop_column("users", "consent_withdrawn_at")
     op.drop_column("users", "consent_at")
     op.drop_column("users", "consent_version")
+    op.drop_column("users", "totp_last_step")
     op.drop_column("users", "totp_enabled_at")
     op.drop_column("users", "totp_pending_secret")
     op.drop_column("users", "totp_secret")

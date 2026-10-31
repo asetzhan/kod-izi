@@ -6,12 +6,12 @@ import secrets
 import time
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.core.roles import Role
 from app.core.security import hash_password
-from app.models import RefreshToken, Submission, TraceEvent, User
+from app.models import RefreshToken, Submission, TraceEvent, User, WorkSession
 from app.services.auth import revoke_family
 
 
@@ -29,11 +29,25 @@ def anonymize(db: Session, user: User) -> None:
     user.totp_pending_secret = None
     user.totp_enabled_at = None
     user.anonymized_at = datetime.now(UTC)
-    families = db.scalars(
-        select(RefreshToken.family_id).where(RefreshToken.user_id == user.id).distinct()
+    revoke_sessions(db, user.id)
+    db.execute(
+        update(RefreshToken).where(RefreshToken.user_id == user.id).values(ip=None, user_agent=None)
     )
-    for family in families:
+    db.execute(update(WorkSession).where(WorkSession.user_id == user.id).values(user_agent=None))
+
+
+def revoke_sessions(db: Session, user_id: int) -> None:
+    """Revoke every refresh token of the user (all devices sign in again)."""
+    families = db.scalars(
+        select(RefreshToken.family_id).where(RefreshToken.user_id == user_id).distinct()
+    )
+    for family in list(families):
         revoke_family(db, family)
+
+
+def email_hash(email: str, secret: str) -> str:
+    """Failed logins are audited without the address itself (spec 14.3), yet stay comparable."""
+    return hmac.new(secret.encode(), f"email:{email}".encode(), hashlib.sha256).hexdigest()[:16]
 
 
 def last_activity(db: Session, user_id: int) -> datetime | None:

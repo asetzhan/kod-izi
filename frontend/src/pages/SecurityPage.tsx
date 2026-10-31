@@ -14,9 +14,10 @@ interface Setup {
 /** Spec 14.1: teachers and administrators set up a TOTP second factor. */
 export function SecurityPage() {
   const { t } = useTranslation();
-  const { user, refreshUser } = useAuth();
+  const { user, signOut } = useAuth();
   const [setup, setSetup] = useState<Setup | null>(null);
   const [code, setCode] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<unknown>(null);
 
   if (user === null) return <Navigate to="/login" replace />;
@@ -35,8 +36,9 @@ export function SecurityPage() {
     event.preventDefault();
     setError(null);
     try {
-      await apiSend("POST", "/api/auth/2fa/enable", { code });
-      await refreshUser?.();
+      await apiSend("POST", "/api/auth/2fa/enable", { code, password });
+      // Sessions opened with the password alone are revoked: sign in again with a code.
+      await signOut();
     } catch (caught) {
       setError(caught);
     }
@@ -70,6 +72,17 @@ export function SecurityPage() {
               onChange={(e) => setCode(e.target.value)}
             />
           </label>
+          <label>
+            {t("security.password")}
+            <input
+              type="password"
+              autoComplete="current-password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </label>
+          <p className="muted">{t("security.signInAgain")}</p>
           <button type="submit">{t("security.enable")}</button>
         </form>
       )}

@@ -4,7 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -51,6 +51,26 @@ class Settings(BaseSettings):
     max_material_bytes: int = 50 * 1024 * 1024
     clamav_host: str = "clamav"
     clamav_port: int = 3310
+
+    @model_validator(mode="after")
+    def _safe_in_production(self) -> "Settings":
+        """Load-test and development switches must not reach production (spec 14.1)."""
+        if self.app_env == "prod":
+            unsafe = [
+                name
+                for name, bad in (
+                    ("REQUIRE_2FA_FOR_STAFF", not self.require_2fa_for_staff),
+                    ("REQUIRE_CONSENT", not self.require_consent),
+                    ("DB_APP_ROLE", not self.db_app_role),
+                    ("JUDGE_BACKEND", self.judge_backend != "judge0"),
+                    ("GRADING_INLINE", self.grading_inline),
+                    ("COOKIE_SECURE", not self.cookie_secure),
+                )
+                if bad
+            ]
+            if unsafe:
+                raise ValueError(f"not allowed when APP_ENV=prod: {', '.join(unsafe)}")
+        return self
 
 
 @lru_cache

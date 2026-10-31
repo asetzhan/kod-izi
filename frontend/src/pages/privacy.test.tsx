@@ -103,3 +103,33 @@ describe("sec14 second factor and consent", () => {
     expect(consent).toBe("2026-1");
   });
 });
+
+describe("sec14 second factor setup", () => {
+  beforeEach(async () => {
+    await i18n.changeLanguage("kk");
+  });
+
+  it("sec14: a teacher enables the factor with a code and password, then signs in again", async () => {
+    const teacher = { ...student, roles: ["teacher"], two_factor_enabled: false };
+    let enableBody: Record<string, unknown> = {};
+    mockApi({
+      "POST /api/auth/login": () => json(200, { access_token: "t", expires_in: 900, user: teacher }),
+      "POST /api/auth/2fa/setup": () =>
+        json(200, { secret: "ABCDEF234567", otpauth_uri: "otpauth://totp/x" }),
+      "POST /api/auth/2fa/enable": (body) => {
+        enableBody = body;
+        return json(200, { ...teacher, two_factor_enabled: true });
+      },
+      "POST /api/auth/logout": () => new Response(null, { status: 204 }),
+    });
+    renderApp();
+    const user = await signIn();
+    await user.click(await screen.findByRole("button", { name: "Баптауды бастау" }));
+    expect(await screen.findByText("ABCDEF234567")).toBeInTheDocument();
+    await user.type(screen.getByLabelText(/6 таңбалы код/), "123456");
+    await user.type(screen.getByLabelText(/растау үшін/), "correct-password");
+    await user.click(screen.getByRole("button", { name: "Қосу" }));
+    expect(await screen.findByLabelText("Электрондық пошта")).toBeInTheDocument();
+    expect(enableBody).toEqual({ code: "123456", password: "correct-password" });
+  });
+});

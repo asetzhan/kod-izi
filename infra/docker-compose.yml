@@ -159,6 +159,7 @@ services:
       PGUSER: ${POSTGRES_USER}
       PGPASSWORD: ${POSTGRES_PASSWORD}
       PGDATABASE: ${POSTGRES_DB}
+      POSTGRES_DB: ${POSTGRES_DB}  # restore.sh refuses to overwrite it without RESTORE_FORCE=1
       BACKUP_PASSPHRASE: ${BACKUP_PASSPHRASE:-}
       BACKUP_DIR: /backups
       MATERIAL_DIR: /data/materials
