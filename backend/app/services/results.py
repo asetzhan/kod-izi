@@ -19,7 +19,7 @@ from app.models import (
     Task,
     TeacherGrade,
 )
-from app.services.component_fill import book_refs
+from app.services.component_fill import book_refs, descriptors_for
 from app.services.components import edit, find_entry
 from app.services.rubrics import CRITERIA_CODES, final_score, get_or_create_rubric
 
@@ -53,9 +53,15 @@ def confirm(
     if task is None:
         raise GradeError("submission without task")
     rubric = get_or_create_rubric(db, task.course_id)
+    descriptors = descriptors_for(db, task)
     ai = latest_ai_grade(db, submission.id)
     ai_levels = {c["code"]: c["level"] for c in ai.criteria} if ai else {}
-    agrees = ai is not None and ai_levels == levels
+    ai_components = {"F": ai.component_f, "E": ai.component_e, "A": ai.component_a} if ai else {}
+    same_components = all(
+        ai_components.get(k) is not None and abs(float(ai_components[k] or 0) - components[k]) < 0.5
+        for k in ("F", "E", "A")
+    )
+    agrees = ai is not None and ai_levels == levels and same_components
     if ai is not None and not agrees and not reason.strip():
         raise GradeError("write why the AI grade was changed")
     ai_feedback = ai.feedback.strip() if ai else ""
@@ -68,7 +74,16 @@ def confirm(
     grade = TeacherGrade(
         submission_id=submission.id,
         ai_grade_id=ai.id if ai else None,
-        criteria=[{"code": code, "level": levels[code]} for code in CRITERIA_CODES],
+        # The interpretation text is frozen with the grade: later edits of the
+        # descriptors do not change what the student was shown.
+        criteria=[
+            {
+                "code": code,
+                "level": levels[code],
+                "interpretation": descriptors.get(code, {}).get(levels[code], ""),
+            }
+            for code in CRITERIA_CODES
+        ],
         component_f=components["F"],
         component_e=components["E"],
         component_a=components["A"],
@@ -83,11 +98,13 @@ def confirm(
     )
     db.add(grade)
     entry = find_entry(db, 5, "submission", submission.id, "interpretation")
-    if entry is not None:
+    if entry is not None and isinstance(entry.value, dict):
         value = dict(entry.value)
         value.update(
             criteria=[
-                {**c, "level": levels.get(c["code"], c["level"])} for c in value.get("criteria", [])
+                {**c, "level": levels.get(c.get("code", ""), c.get("level"))}
+                for c in value.get("criteria", [])
+                if isinstance(c, dict)
             ],
             feedback=feedback,
             next_step=next_step,

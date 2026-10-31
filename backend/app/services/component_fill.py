@@ -99,7 +99,9 @@ def template_goals(topic: Topic) -> dict[str, Any]:
     }
 
 
-def fill_goals(db: Session, provider: LLMProvider, course: Course) -> int:
+def fill_goals(
+    db: Session, provider: LLMProvider, course: Course, user_id: int | None = None
+) -> int:
     """ФТ-09: component 1 for every topic of the course."""
     count = 0
     for topic in course.topics:
@@ -117,7 +119,7 @@ def fill_goals(db: Session, provider: LLMProvider, course: Course) -> int:
         value = template_goals(topic)
         try:
             answer = json.loads(
-                gateway.call(db, provider, request, purpose="panel", user_id=None).text
+                gateway.call(db, provider, request, purpose="panel", user_id=user_id).text
             )
             outcomes = [
                 str(o).strip() for o in answer.get("learning_outcomes", []) if str(o).strip()
@@ -137,7 +139,9 @@ def fill_goals(db: Session, provider: LLMProvider, course: Course) -> int:
     return count
 
 
-def fill_descriptors(db: Session, provider: LLMProvider, course: Course) -> int:
+def fill_descriptors(
+    db: Session, provider: LLMProvider, course: Course, user_id: int | None = None
+) -> int:
     """ФТ-14: component 2, the course rubric adapted to each task."""
     rubric = get_or_create_rubric(db, course.id)
     base = {
@@ -158,7 +162,7 @@ def fill_descriptors(db: Session, provider: LLMProvider, course: Course) -> int:
         value = {code: dict(levels) for code, levels in base.items()}
         try:
             answer = json.loads(
-                gateway.call(db, provider, request, purpose="panel", user_id=None).text
+                gateway.call(db, provider, request, purpose="panel", user_id=user_id).text
             )
             adapted = {c["code"]: c for c in answer.get("criteria", []) if c.get("code") in base}
             if set(adapted) == set(base) and all(adapted[c]["high"] != "fake" for c in adapted):
@@ -175,8 +179,8 @@ def fill_descriptors(db: Session, provider: LLMProvider, course: Course) -> int:
 def descriptors_for(db: Session, task: Task) -> dict[str, dict[str, str]]:
     """Descriptors in force for a task: component 2 if filled, else the course rubric."""
     entry = find_entry(db, 2, "task", task.id, "descriptors")
-    if entry is not None:
-        return dict(entry.value)
+    if entry is not None and isinstance(entry.value, dict):
+        return {k: v for k, v in entry.value.items() if isinstance(v, dict)}
     rubric = get_or_create_rubric(db, task.course_id)
     return {
         c.code: {"low": c.descriptor_low, "mid": c.descriptor_mid, "high": c.descriptor_high}

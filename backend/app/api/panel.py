@@ -40,6 +40,7 @@ from app.services.components import (
     revert,
     set_auto_enabled,
 )
+from app.services.entry_schemas import check_value
 from app.services.results import (
     MASTERY_KEY,
     GradeError,
@@ -54,6 +55,7 @@ from app.services.rubrics import get_or_create_rubric
 router = APIRouter(prefix="/api", tags=["panel"])
 
 Component = Annotated[int, Field(ge=1, le=5)]
+GENERATE_LOCK = 4_710_002
 
 
 def _forbidden() -> HTTPException:
@@ -221,10 +223,14 @@ def generate(
         )
     enabled = auto_enabled(db, course_id, component)
     count = 0
+    # One generation per course at a time: it calls the model once per topic or task.
+    locked = db.scalar(select(func.pg_try_advisory_xact_lock(GENERATE_LOCK, course_id)))
+    if not locked:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="generation_running")
     if enabled:
         try:
             fill = fill_goals if component == 1 else fill_descriptors
-            count = fill(db, get_provider(), course)
+            count = fill(db, get_provider(), course, user.id)
         except LLMUnavailableError:
             raise HTTPException(
                 status.HTTP_503_SERVICE_UNAVAILABLE, detail="llm_unavailable"
@@ -261,7 +267,11 @@ def edit_entry(
     entry = _entry_for_edit(db, user, entry_id)
     if entry.component == 4 and entry.key == "signals":
         raise _unprocessable("signals_are_computed", "comment on a signal instead (ФТ-36)")
-    edit(db, entry, body.value, user.id, body.note)
+    try:
+        value = check_value(entry.component, entry.key, body.value)
+    except ValueError as exc:
+        raise _unprocessable("bad_value", str(exc)) from None
+    edit(db, entry, value, user.id, body.note)
     audit.record(
         db,
         AuditAction.COMPONENT_EDITED,
@@ -578,7 +588,9 @@ def my_results(user: CurrentUser, db: DbSession, task_id: int | None = None) -> 
                         code=c["code"],
                         name=names.get(c["code"], c["code"]),
                         level=c["level"],
-                        interpretation=descriptors.get(c["code"], {}).get(c["level"], ""),
+                        # Frozen at confirmation; older grades use the current descriptors.
+                        interpretation=c.get("interpretation")
+                        or descriptors.get(c["code"], {}).get(c["level"], ""),
                     )
                     for c in grade.criteria
                 ],

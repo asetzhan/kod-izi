@@ -265,7 +265,7 @@ def _ai_levels(db: Session, submission_id: int) -> dict[str, str]:
 def _confirm(client: TestClient, ws: dict[str, Any], submission_id: int, **body: Any) -> Any:
     payload = {
         "levels": LEVELS_OK,
-        "components": {"F": 100, "E": 60, "A": 50},
+        "components": {"F": 100, "E": 50, "A": 50},
         "feedback": "fake feedback",
         **body,
     }
@@ -282,7 +282,9 @@ def test_ft03_teacher_confirms_or_corrects_and_both_grades_stay(
     assert ai_before == LEVELS_OK  # the fake grader: all tests passed
     agreed = _confirm(client, ws, result["id"]).json()
     assert agreed["agrees_with_ai"] is True and agreed["feedback_source"] == "ai"
-    assert agreed["score"] == round(0.3626 * 100 + 0.3641 * 60 + 0.2733 * 50, 2)
+    assert agreed["score"] == round(0.3626 * 100 + 0.3641 * 50 + 0.2733 * 50, 2)
+    other_score = _confirm(client, ws, result["id"], components={"F": 100, "E": 80, "A": 50})
+    assert other_score.status_code == 422  # a changed score also needs a reason
 
     lower = {**LEVELS_OK, "explanation": "mid"}
     no_reason = _confirm(client, ws, result["id"], levels=lower)
@@ -462,3 +464,67 @@ def test_ft43_threshold_is_a_setting(
         f"/api/my/mastery?course_id={ws['course']['id']}", headers=ws["student"]
     ).json()[0]
     assert row["mastered"] is True
+
+
+@pytest.mark.parametrize(
+    ("value", "ok"),
+    [
+        ({"understanding": {"low": "a", "mid": "b", "high": "c"}}, False),  # not all criteria
+        (["not", "an", "object"], False),
+        ({c: {"low": "a", "mid": "b", "high": "c"} for c in LEVELS_OK}, True),
+        ({c: {"low": "a", "mid": "b", "high": "x" * 3000} for c in LEVELS_OK}, False),
+    ],
+)
+def test_sec14_component_values_are_checked(
+    client: TestClient, ws: dict[str, Any], value: Any, ok: bool
+) -> None:
+    _generate(client, ws, 2)
+    [entry] = _entries(client, ws, 2)
+    response = client.put(
+        f"/api/entries/{entry['id']}", headers=ws["teacher"], json={"value": value}
+    )
+    assert response.status_code == (200 if ok else 422)
+
+
+def test_ft41_confirmed_interpretation_does_not_change_later(
+    client: TestClient, ws: dict[str, Any]
+) -> None:
+    _generate(client, ws, 2)
+    result = _submit(client, ws, _open(client, ws))
+    _confirm(client, ws, result["id"])
+    before = client.get("/api/my/results", headers=ws["student"]).json()[0]["criteria"][0]
+    [entry] = _entries(client, ws, 2)
+    changed = {c: {"low": "L", "mid": "M", "high": "Кейін өзгертілген"} for c in LEVELS_OK}
+    client.put(f"/api/entries/{entry['id']}", headers=ws["teacher"], json={"value": changed})
+    after = client.get("/api/my/results", headers=ws["student"]).json()[0]["criteria"][0]
+    assert after["interpretation"] == before["interpretation"] != "Кейін өзгертілген"
+
+
+def test_sec14_other_teacher_and_outside_student_are_refused(
+    client: TestClient, ws: dict[str, Any], school: School
+) -> None:
+    _add_topic(client, ws)
+    _generate(client, ws, 1)
+    [entry] = _entries(client, ws, 1)
+    result = _submit(client, ws, _open(client, ws))
+    other = login(client, school["teacher_b"].email)
+    course, sub_id, a_id = ws["course"]["id"], result["id"], ws["assessment"]["id"]
+    outsider = login(client, school["student_b"].email)
+    attempts = [
+        client.get(f"/api/entries/{entry['id']}/versions", headers=other),
+        client.post(f"/api/entries/{entry['id']}/revert", headers=other, json={"version": 1}),
+        client.post(f"/api/entries/{entry['id']}/suggestion/accept", headers=other),
+        client.get(f"/api/submissions/{sub_id}/teacher-grade", headers=other),
+        client.post(
+            f"/api/submissions/{sub_id}/teacher-grade",
+            headers=other,
+            json={"levels": LEVELS_OK, "components": {"F": 1, "E": 1, "A": 1}, "feedback": "x"},
+        ),
+        client.put(f"/api/assessments/{a_id}/analysis", headers=other, json={"excluded": []}),
+        client.get(f"/api/courses/{course}/mastery", headers=other),
+        client.post(f"/api/courses/{course}/components/1/generate", headers=other),
+        client.get(f"/api/courses/{course}/components/1/entries", headers=ws["student"]),
+        client.get(f"/api/submissions/{sub_id}/teacher-grade", headers=ws["student"]),
+        client.get(f"/api/my/mastery?course_id={course}", headers=outsider),
+    ]
+    assert [r.status_code for r in attempts] == [403] * len(attempts)
