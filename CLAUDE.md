@@ -21,7 +21,10 @@
 - `make dev` — барлық сервисті docker compose арқылы іске қосу
 - `make test` — backend және frontend тесттері
 - `make lint` — ruff, mypy, eslint, tsc
-- `make seed` — seed/ деректерін дерекқорға жүктеу
+- `make seed` — seed/ деректерін дерекқорға жүктеу (0-кезеңде тек dev демо-аккаунттары)
+- `make migrate` — Alembic миграцияларын орындау
+- `make create-admin EMAIL=...` — бірінші әкімшіні жасау
+- `make down`, `make logs` — сервистерді тоқтату, логтарды көру
 
 Жаңа команда қосылса, осы тізімді жаңарт.
 

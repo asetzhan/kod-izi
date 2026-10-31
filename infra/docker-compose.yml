@@ -1,0 +1,184 @@
+# Development stack (`make dev`). Production configuration is prepared in stage 5.
+#
+# Networks:
+#   edge  - Nginx, frontend, backend. Only Nginx publishes a port.
+#   data  - PostgreSQL, Redis. internal: no route to the outside world.
+#   judge - Judge0 and its own database. internal: student code never reaches
+#           the internet or the application database (spec 14.1).
+
+name: kod-izi
+
+x-backend-env: &backend-env
+  APP_ENV: ${APP_ENV:-dev}
+  DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+  TEST_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}_test
+  REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+  JWT_SECRET: ${JWT_SECRET}
+  ACCESS_TOKEN_TTL_MINUTES: ${ACCESS_TOKEN_TTL_MINUTES:-15}
+  REFRESH_TOKEN_TTL_DAYS: ${REFRESH_TOKEN_TTL_DAYS:-7}
+  LOGIN_MAX_ATTEMPTS: ${LOGIN_MAX_ATTEMPTS:-5}
+  LOGIN_WINDOW_SECONDS: ${LOGIN_WINDOW_SECONDS:-900}
+  COOKIE_SECURE: ${COOKIE_SECURE:-true}
+  DEMO_PASSWORD: ${DEMO_PASSWORD:-}
+  LLM_PROVIDER: ${LLM_PROVIDER:-fake}
+  JUDGE0_URL: http://judge0-server:2358
+  JUDGE0_AUTHN_TOKEN: ${JUDGE0_AUTHN_TOKEN}
+  REPO_ROOT: /repo
+
+x-judge0: &judge0
+  image: judge0/judge0:1.13.1
+  privileged: true # required by the isolate sandbox inside the container
+  volumes:
+    - ./judge0/judge0.conf:/judge0.conf:ro
+  env_file: ./judge0/judge0.conf
+  environment:
+    POSTGRES_PASSWORD: ${JUDGE0_DB_PASSWORD}
+    REDIS_PASSWORD: ${JUDGE0_REDIS_PASSWORD}
+    AUTHN_TOKEN: ${JUDGE0_AUTHN_TOKEN}
+  networks: [judge]
+  depends_on:
+    judge0-db:
+      condition: service_healthy
+    judge0-redis:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      edge:
+        ipv4_address: 172.28.0.10
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/api/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  frontend:
+    build: ../frontend
+    volumes:
+      - ../frontend:/app
+      - /app/node_modules
+    networks: [edge]
+
+  backend:
+    build: ../backend
+    environment: *backend-env
+    volumes:
+      - ../backend:/app
+      - ../.claude:/repo/.claude:ro
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+             --proxy-headers --forwarded-allow-ips=172.28.0.10"
+    networks: [edge, data, judge]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  worker:
+    build: ../backend
+    environment: *backend-env
+    volumes:
+      - ../backend:/app
+    command: sh -c 'rq worker --url "$$REDIS_URL" default'
+    networks: [data]
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    networks: [data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ["sh", "-c", 'exec redis-server --requirepass "$$REDIS_PASSWORD"']
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    networks: [data]
+    healthcheck:
+      test: ["CMD-SHELL", 'redis-cli -a "$$REDIS_PASSWORD" --no-auth-warning ping | grep PONG']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  judge0-server:
+    <<: *judge0
+
+  judge0-workers:
+    <<: *judge0
+    command: ["./scripts/workers"]
+
+  judge0-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: judge0
+      POSTGRES_USER: judge0
+      POSTGRES_PASSWORD: ${JUDGE0_DB_PASSWORD}
+    volumes:
+      - judge0-db:/var/lib/postgresql/data
+    networks: [judge]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U judge0 -d judge0"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  judge0-redis:
+    image: redis:7-alpine
+    command: ["sh", "-c", 'exec redis-server --requirepass "$$REDIS_PASSWORD"']
+    environment:
+      REDIS_PASSWORD: ${JUDGE0_REDIS_PASSWORD}
+    networks: [judge]
+    healthcheck:
+      test: ["CMD-SHELL", 'redis-cli -a "$$REDIS_PASSWORD" --no-auth-warning ping | grep PONG']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+networks:
+  edge:
+    ipam:
+      config:
+        # Fixed subnet so the backend trusts X-Forwarded-For only from Nginx.
+        - subnet: 172.28.0.0/24
+  data:
+    internal: true
+  judge:
+    internal: true
+
+volumes:
+  pgdata: {}
+  judge0-db: {}
