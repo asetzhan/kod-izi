@@ -15,6 +15,8 @@ from html.parser import HTMLParser
 from defusedxml import ElementTree
 
 MAX_PAGES = 3000
+MAX_UNPACKED = 100 * 1024 * 1024  # DOCX, PPTX, EPUB after unpacking
+MAX_MEMBER = 20 * 1024 * 1024  # one EPUB chapter
 CHUNK_CHARS = 1200
 CHUNK_OVERLAP = 150
 
@@ -60,17 +62,23 @@ def detect_type(filename: str, data: bytes) -> str:
     try:
         archive = zipfile.ZipFile(io.BytesIO(data))
         names = set(archive.namelist())
+    except zipfile.BadZipFile:
+        raise ExtractError("type_mismatch") from None
+    # Zip bombs: the declared sizes are checked before anything is unpacked.
+    if sum(i.file_size for i in archive.infolist()) > MAX_UNPACKED:
+        raise ExtractError("too_large_unpacked")
+    try:
         if extension == ".epub":
+            if archive.getinfo("mimetype").file_size > 64:
+                raise ExtractError("type_mismatch")
             if archive.read("mimetype").strip() != b"application/epub+zip":
                 raise ExtractError("type_mismatch")
             return expected
-        marker = "word/document.xml" if extension == ".docx" else "ppt/presentation.xml"
-        if marker not in names or "[Content_Types].xml" not in names:
-            raise ExtractError("type_mismatch")
-    except (zipfile.BadZipFile, KeyError):
+    except KeyError:
         raise ExtractError("type_mismatch") from None
-    if sum(i.file_size for i in archive.infolist()) > 300 * 1024 * 1024:
-        raise ExtractError("too_large_unpacked")
+    marker = "word/document.xml" if extension == ".docx" else "ppt/presentation.xml"
+    if marker not in names or "[Content_Types].xml" not in names:
+        raise ExtractError("type_mismatch")
     return expected
 
 
@@ -196,6 +204,8 @@ def extract_epub(data: bytes) -> list[Page]:
         if path.startswith(".."):
             continue
         parser = _TextOf()
+        if archive.getinfo(path).file_size > MAX_MEMBER:
+            raise ExtractError("chapter_too_large")
         parser.feed(archive.read(path).decode("utf-8", errors="replace"))
         text = re.sub(r"\n\s*\n+", "\n\n", "".join(parser.parts)).strip()
         if text:

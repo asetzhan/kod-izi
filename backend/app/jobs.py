@@ -49,7 +49,7 @@ def _materials_queue() -> Queue:
 
 
 def enqueue_material(version_id: int) -> None:
-    _materials_queue().enqueue(material_job, version_id, job_timeout=3600)
+    _materials_queue().enqueue(material_job, version_id, job_timeout=600)
 
 
 def get_material_enqueue() -> Callable[[int], None]:

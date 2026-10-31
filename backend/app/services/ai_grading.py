@@ -326,7 +326,13 @@ def grade(
     flags = list(answer.flags)
     untrusted = {
         k: request.data_blocks[k]
-        for k in ("student_code", "student_explanation", "genai_log", "book_fragments")
+        for k in (
+            "student_code",
+            "student_explanation",
+            "genai_log",
+            "book_fragments",
+            "static_analysis",
+        )
     }
     injected = find_injection(untrusted)
     if injected or "possible_injection" in flags:

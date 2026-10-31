@@ -1,5 +1,6 @@
 """LLM gateway interface (ФТ-46). Q-08/Q-09: production uses a local model (Ollama)."""
 
+import re
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -33,10 +34,13 @@ class LLMProvider(Protocol):
     def embed(self, texts: list[str]) -> list[list[float]]: ...
 
 
+DATA_TAG = re.compile(r"</?\s*data", re.IGNORECASE)
+
+
 def render_data_blocks(blocks: dict[str, str]) -> str:
     """Wrap each input in its own <data> block; a closing tag inside the data cannot end it."""
     parts = []
     for name, content in blocks.items():
-        safe = content.replace("</data", "<\\/data").replace("<data", "<\\data")
+        safe = DATA_TAG.sub(lambda m: m.group(0).replace("<", "<\\"), content)
         parts.append(f'<data name="{name}">\n{safe}\n</data>')
     return "\n\n".join(parts)

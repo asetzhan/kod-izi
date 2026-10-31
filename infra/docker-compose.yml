@@ -113,6 +113,8 @@ services:
       - materials:/data/materials:ro
     command: sh -c 'rq worker --url "$$REDIS_URL" default'
     networks: [data, judge, llm] # grading calls Judge0 and the local LLM
+    mem_limit: 4g # static analysers run here too
+    pids_limit: 256
     depends_on:
       redis:
         condition: service_healthy
@@ -121,7 +123,19 @@ services:
   # embeddings. No internet, no web tier, no Judge0.
   extractor:
     build: ../backend
-    environment: *backend-env
+    # Only what text extraction needs: no Judge0 token, no real JWT secret.
+    environment:
+      APP_ENV: ${APP_ENV:-dev}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      JWT_SECRET: extractor-does-not-issue-tokens-0000000000
+      LLM_PROVIDER: ${LLM_PROVIDER:-fake}
+      OLLAMA_URL: http://ollama:11434
+      OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL:-bge-m3}
+      MATERIAL_DIR: /data/materials
+      CLAMAV_HOST: clamav
+    mem_limit: 4g
+    pids_limit: 256
     command: sh -c 'rq worker --url "$$REDIS_URL" materials'
     volumes:
       - ../backend:/app
@@ -133,8 +147,8 @@ services:
 
   clamav:
     image: clamav/clamav:1.4
-    # `edge` only for signature updates (freshclam); files arrive over `scan`.
-    networks: [scan, edge]
+    # `egress` only for signature updates (freshclam); files arrive over `scan`.
+    networks: [scan, egress]
 
   # Local LLM (Q-08, Q-09). Optional: `make llm` starts it and downloads the models.
   ollama:
@@ -142,8 +156,8 @@ services:
     profiles: [llm]
     volumes:
       - ollama:/root/.ollama
-    # `edge` only to download models; student data reaches it over `llm`.
-    networks: [llm, edge]
+    # `egress` only to download models; student data reaches it over `llm`.
+    networks: [llm, egress]
 
   postgres:
     image: pgvector/pgvector:pg16
@@ -219,6 +233,9 @@ networks:
     internal: true
   llm:
     internal: true
+  # Internet access for ClamAV signatures and Ollama models only; nothing of the
+  # application (Nginx, backend, frontend) is on this network.
+  egress: {}
   scan:
     internal: true
 

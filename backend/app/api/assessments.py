@@ -112,7 +112,8 @@ def list_assessments(
         query = query.where(Assessment.course_id.in_(my_courses))
         # Students learn the schedule, not the task list, before the start.
         return [
-            AssessmentOut.build(a).model_copy(update={"task_ids": []}) for a in db.scalars(query)
+            AssessmentOut.build(a).model_copy(update={"task_ids": [], "teacher_requirements": ""})
+            for a in db.scalars(query)
         ]
     return [AssessmentOut.build(a) for a in db.scalars(query)]
 

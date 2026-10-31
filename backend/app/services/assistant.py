@@ -17,6 +17,7 @@ from app.services.materials import find_fragments, fragments_block
 from app.services.trace import record_server_event
 
 PROMPT_VERSION = "assistant-v1"
+CODE_LIMIT = 20_000  # characters of the student's code sent to the model
 
 SYSTEM_PROMPTS = {
     GenAiMode.HINTS_ONLY: (
@@ -75,6 +76,8 @@ def ask(
     mode = GenAiMode(assessment.genai_mode) if assessment else GenAiMode.OPEN
     if mode == GenAiMode.FORBIDDEN:
         raise AssistantForbiddenError()
+    gateway.ensure_quota(db, session.user_id)  # before any model work, embeddings included
+    code = code[:CODE_LIMIT]
 
     fragments = find_fragments(db, provider, task, assessment, f"{question}\n{code}", limit=3)
     request = LLMRequest(

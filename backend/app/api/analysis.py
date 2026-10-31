@@ -17,6 +17,7 @@ from app.api.deps import AppSettings, CurrentUser, DbSession, client_ip
 from app.core.enums import MaterialKind, MaterialStatus
 from app.jobs import get_material_enqueue
 from app.llm import gateway
+from app.llm.ollama import LLMUnavailableError
 from app.llm.registry import get_provider
 from app.models import (
     AiGrade,
@@ -279,7 +280,13 @@ def list_materials(course_id: int, user: CurrentUser, db: DbSession) -> list[Mat
     materials = db.scalars(
         select(Material).where(Material.course_id == course_id).order_by(Material.id)
     )
-    return [MaterialOut.build(m) for m in materials]
+    out = [MaterialOut.build(m) for m in materials]
+    if can_edit_course(db, user, course_id):
+        return out
+    # Students: ready versions only, without internal processing errors.
+    for material in out:
+        material.versions = [v for v in material.versions if v.status == MaterialStatus.READY]
+    return [m for m in out if m.versions]
 
 
 @router.get("/materials/{material_id}/file")
@@ -492,7 +499,10 @@ def regrade(submission_id: int, request: Request, user: CurrentUser, db: DbSessi
     submission = _teacher_submission(db, user, submission_id)
     if submission.verdict is None:
         raise _unprocessable("not_tested")
-    record = ai_grading.grade(db, get_provider(), submission)
+    try:
+        record = ai_grading.grade(db, get_provider(), submission)
+    except LLMUnavailableError:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, detail="llm_unavailable") from None
     audit.record(
         db,
         AuditAction.AI_GRADE_REQUESTED,
