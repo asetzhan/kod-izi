@@ -1,0 +1,96 @@
+{
+  "source": "Диссертация, Г қосымшасы",
+  "status": "Шарттар ғана берілген. Кіріс-шығыс форматы, шектеулер, тесттер мен эталон шешімдерді Claude Code жоба ретінде дайындайды, тапсырыс беруші бекітеді.",
+  "tasks": [
+    {
+      "id": "EXP-I-1",
+      "level": "I",
+      "statement_kk": "Берілген n бүтін санының жұп немесе тақ екенін анықтаңыз.",
+      "input_format": null,
+      "output_format": null,
+      "constraints": null,
+      "tests": [],
+      "reference_solution": null
+    },
+    {
+      "id": "EXP-I-2",
+      "level": "I",
+      "statement_kk": "Берілген үш санның ең үлкенін анықтаңыз.",
+      "input_format": null,
+      "output_format": null,
+      "constraints": null,
+      "tests": [],
+      "reference_solution": null
+    },
+    {
+      "id": "EXP-I-3",
+      "level": "I",
+      "statement_kk": "Берілген n бүтін санының цифрларын кері ретпен шығарыңыз.",
+      "input_format": null,
+      "output_format": null,
+      "constraints": null,
+      "tests": [],
+      "reference_solution": null
+    },
+    {
+      "id": "EXP-II-4",
+      "level": "II",
+      "statement_kk": "Берілген массивтегі тақ сандардың қосындысын анықтаңыз.",
+      "input_format": null,
+      "output_format": null,
+      "constraints": null,
+      "tests": [],
+      "reference_solution": null
+    },
+    {
+      "id": "EXP-II-5",
+      "level": "II",
+      "statement_kk": "Берілген сөздің палиндром екенін анықтаңыз.",
+      "input_format": null,
+      "output_format": null,
+      "constraints": null,
+      "tests": [],
+      "reference_solution": null
+    },
+    {
+      "id": "EXP-II-6",
+      "level": "II",
+      "statement_kk": "Берілген n натурал санының барлық бөлгіштерін анықтаңыз.",
+      "input_format": null,
+      "output_format": null,
+      "constraints": null,
+      "tests": [],
+      "reference_solution": null
+    },
+    {
+      "id": "EXP-III-7",
+      "level": "III",
+      "statement_kk": "Берілген санның кез келген екі цифрының орнын ауыстыру арқылы палиндром сан алуға болатынын анықтаңыз.",
+      "input_format": null,
+      "output_format": null,
+      "constraints": null,
+      "tests": [],
+      "reference_solution": null
+    },
+    {
+      "id": "EXP-III-8",
+      "level": "III",
+      "statement_kk": "Берілген сандар жиынынан ең жиі кездесетін санды анықтаңыз.",
+      "input_format": null,
+      "output_format": null,
+      "constraints": null,
+      "tests": [],
+      "reference_solution": null
+    },
+    {
+      "id": "EXP-III-9",
+      "level": "III",
+      "statement_kk": "Берілген санның цифрларының орнын ауыстыру арқылы бастапқы саннан үлкен ең кіші санды анықтаңыз. Мысал: Input 12543, Output 13245.",
+      "input_format": null,
+      "output_format": null,
+      "constraints": null,
+      "tests": [],
+      "reference_solution": null
+    }
+  ]
+}

@@ -1,0 +1,431 @@
+{
+  "note": "Сабақ ID-лері Stepik API-ден 2026-10-31 алынды. Сабақ сілтемесі дәрісті де, практикалық тапсырмаларды да ашады. Есеп шарттарын жүйеге көшіру үшін авторлардың рұқсаты керек (docs/spec/questions.md, Q-05).",
+  "courses": [
+    {
+      "stepik_id": 363,
+      "title": "Введение в программирование (C++)",
+      "authors": "Академия Яндекса, НИУ ВШЭ",
+      "url": "https://stepik.org/course/363/syllabus",
+      "system_part": "1-бөлім: C++ негіздері",
+      "levels": [
+        "I",
+        "II",
+        "III"
+      ],
+      "topics": [
+        {
+          "code": "1.1",
+          "title_kk": "Кіріспе",
+          "lessons": [
+            {
+              "lesson_id": 12908,
+              "title_ru": "Вводное занятие",
+              "url": "https://stepik.org/lesson/12908/step/1",
+              "kind": "lecture_and_practice"
+            }
+          ]
+        },
+        {
+          "code": "1.2",
+          "title_kk": "Жұмыс ортасы",
+          "lessons": [
+            {
+              "lesson_id": 13020,
+              "title_ru": "Знакомство со средой разработки",
+              "url": "https://stepik.org/lesson/13020/step/1",
+              "kind": "lecture_and_practice"
+            }
+          ]
+        },
+        {
+          "code": "1.3",
+          "title_kk": "Бүтін сандар",
+          "lessons": [
+            {
+              "lesson_id": 13021,
+              "title_ru": "Целые числа",
+              "url": "https://stepik.org/lesson/13021/step/1",
+              "kind": "lecture_and_practice"
+            }
+          ]
+        },
+        {
+          "code": "1.4",
+          "title_kk": "Шартты оператор",
+          "lessons": [
+            {
+              "lesson_id": 13022,
+              "title_ru": "Условный оператор",
+              "url": "https://stepik.org/lesson/13022/step/1",
+              "kind": "lecture_and_practice"
+            }
+          ]
+        },
+        {
+          "code": "1.5",
+          "title_kk": "while циклі",
+          "lessons": [
+            {
+              "lesson_id": 13023,
+              "title_ru": "Цикл while",
+              "url": "https://stepik.org/lesson/13023/step/1",
+              "kind": "lecture_and_practice"
+            }
+          ]
+        },
+        {
+          "code": "1.6",
+          "title_kk": "Нақты сандар",
+          "lessons": [
+            {
+              "lesson_id": 13024,
+              "title_ru": "Действительные числа",
+              "url": "https://stepik.org/lesson/13024/step/1",
+              "kind": "lecture_and_practice"
+            }
+          ]
+        },
+        {
+          "code": "1.7",
+          "title_kk": "for циклі және массивтер",
+          "lessons": [
+            {
+              "lesson_id": 13025,
+              "title_ru": "Цикл for и массивы",
+              "url": "https://stepik.org/lesson/13025/step/1",
+              "kind": "lecture_and_practice"
+            }
+          ]
+        },
+        {
+          "code": "1.8",
+          "title_kk": "Екі өлшемді массивтер",
+          "lessons": [
+            {
+              "lesson_id": 13026,
+              "title_ru": "Двумерные массивы",
+              "url": "https://stepik.org/lesson/13026/step/1",
+              "kind": "lecture_and_practice"
+            }
+          ]
+        },
+        {
+          "code": "1.9",
+          "title_kk": "Функциялар және рекурсия",
+          "lessons": [
+            {
+              "lesson_id": 13027,
+              "title_ru": "Функции и рекурсия",
+              "url": "https://stepik.org/lesson/13027/step/1",
+              "kind": "lecture_and_practice"
+            }
+          ]
+        },
+        {
+          "code": "1.10",
+          "title_kk": "Жолдар және символдар",
+          "lessons": [
+            {
+              "lesson_id": 13028,
+              "title_ru": "Строки и символы",
+              "url": "https://stepik.org/lesson/13028/step/1",
+              "kind": "lecture_and_practice"
+            }
+          ]
+        },
+        {
+          "code": "1.11",
+          "title_kk": "Сөздіктер мен жиындар",
+          "lessons": [
+            {
+              "lesson_id": 13029,
+              "title_ru": "Словари и множества",
+              "url": "https://stepik.org/lesson/13029/step/1",
+              "kind": "lecture_and_practice"
+            }
+          ]
+        },
+        {
+          "code": "1.12",
+          "title_kk": "STL алгоритмдері",
+          "lessons": [
+            {
+              "lesson_id": 13030,
+              "title_ru": "Стандартные алгоритмы STL",
+              "url": "https://stepik.org/lesson/13030/step/1",
+              "kind": "lecture_and_practice"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "stepik_id": 64454,
+      "title": "Быстрый старт в спортивное программирование",
+      "authors": "МФТИ Центр развития ИТ-образования",
+      "url": "https://stepik.org/course/64454/syllabus",
+      "system_part": "2-бөлім, 4.1 Алгоритмдер мен математика",
+      "levels": [
+        "III",
+        "IV"
+      ],
+      "topics": [
+        {
+          "code": "4.1.1",
+          "title_kk": "Базалық алгоритмдер",
+          "title_ru": "Базовые алгоритмы",
+          "lessons": [
+            {
+              "lesson_id": 308619,
+              "title_ru": "Асимптотика",
+              "url": "https://stepik.org/lesson/308619/step/1",
+              "kind": "lecture_and_practice"
+            },
+            {
+              "lesson_id": 307317,
+              "title_ru": "Линейные алгоритмы",
+              "url": "https://stepik.org/lesson/307317/step/1",
+              "kind": "lecture_and_practice"
+            },
+            {
+              "lesson_id": 307318,
+              "title_ru": "Бинарный поиск Ч1",
+              "url": "https://stepik.org/lesson/307318/step/1",
+              "kind": "lecture_and_practice"
+            },
+            {
+              "lesson_id": 311541,
+              "title_ru": "Бинарный поиск Ч2",
+              "url": "https://stepik.org/lesson/311541/step/1",
+              "kind": "lecture_and_practice"
+            },
+            {
+              "lesson_id": 313545,
+              "title_ru": "Итоговое тестирование",
+              "url": "https://stepik.org/lesson/313545/step/1",
+              "kind": "final_test"
+            }
+          ]
+        },
+        {
+          "code": "4.1.2",
+          "title_kk": "Сандар теориясы",
+          "title_ru": "Теория чисел",
+          "lessons": [
+            {
+              "lesson_id": 307321,
+              "title_ru": "Целые типы данных, решето Эратосфена",
+              "url": "https://stepik.org/lesson/307321/step/1",
+              "kind": "lecture_and_practice"
+            },
+            {
+              "lesson_id": 307322,
+              "title_ru": "Операции по модулю",
+              "url": "https://stepik.org/lesson/307322/step/1",
+              "kind": "lecture_and_practice"
+            },
+            {
+              "lesson_id": 307320,
+              "title_ru": "Алгоритм Евклида",
+              "url": "https://stepik.org/lesson/307320/step/1",
+              "kind": "lecture_and_practice"
+            },
+            {
+              "lesson_id": 307324,
+              "title_ru": "Бинарное возведение в степень и деление по модулю",
+              "url": "https://stepik.org/lesson/307324/step/1",
+              "kind": "lecture_and_practice"
+            },
+            {
+              "lesson_id": 316445,
+              "title_ru": "Итоговое тестирование",
+              "url": "https://stepik.org/lesson/316445/step/1",
+              "kind": "final_test"
+            }
+          ]
+        },
+        {
+          "code": "4.1.3",
+          "title_kk": "Динамикалық программалау",
+          "title_ru": "Динамическое программирование",
+          "lessons": [
+            {
+              "lesson_id": 307325,
+              "title_ru": "Определения",
+              "url": "https://stepik.org/lesson/307325/step/1",
+              "kind": "lecture_and_practice"
+            },
+            {
+              "lesson_id": 307326,
+              "title_ru": "Линейное динамическое программирование",
+              "url": "https://stepik.org/lesson/307326/step/1",
+              "kind": "lecture_and_practice"
+            },
+            {
+              "lesson_id": 307327,
+              "title_ru": "Двумерное динамическое программирование",
+              "url": "https://stepik.org/lesson/307327/step/1",
+              "kind": "lecture_and_practice"
+            },
+            {
+              "lesson_id": 307328,
+              "title_ru": "Восстановление ответа",
+              "url": "https://stepik.org/lesson/307328/step/1",
+              "kind": "lecture_and_practice"
+            },
+            {
+              "lesson_id": 307329,
+              "title_ru": "Задача о рюкзаке",
+              "url": "https://stepik.org/lesson/307329/step/1",
+              "kind": "lecture_and_practice"
+            },
+            {
+              "lesson_id": 318736,
+              "title_ru": "Итоговое тестирование",
+              "url": "https://stepik.org/lesson/318736/step/1",
+              "kind": "final_test"
+            }
+          ]
+        },
+        {
+          "code": "4.1.4",
+          "title_kk": "Графтар теориясы",
+          "title_ru": "Теория графов",
+          "lessons": [
+            {
+              "lesson_id": 307330,
+              "title_ru": "Базовые определения теории графов",
+              "url": "https://stepik.org/lesson/307330/step/1",
+              "kind": "lecture_and_practice"
+            },
+            {
+              "lesson_id": 307331,
+              "title_ru": "Обход в глубину",
+              "url": "https://stepik.org/lesson/307331/step/1",
+              "kind": "lecture_and_practice"
+            },
+            {
+              "lesson_id": 307332,
+              "title_ru": "Обход в ширину",
+              "url": "https://stepik.org/lesson/307332/step/1",
+              "kind": "lecture_and_practice"
+            },
+            {
+              "lesson_id": 323838,
+              "title_ru": "Итоговое тестирование",
+              "url": "https://stepik.org/lesson/323838/step/1",
+              "kind": "final_test"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "stepik_id": 1547,
+      "title": "Алгоритмы: теория и практика. Структуры данных",
+      "authors": "Computer Science центр (А. Куликов)",
+      "url": "https://stepik.org/course/1547/syllabus",
+      "system_part": "2-бөлім, 4.2 Деректер құрылымдары",
+      "levels": [
+        "III",
+        "IV"
+      ],
+      "topics": [
+        {
+          "code": "4.2.1",
+          "title_kk": "Базалық деректер құрылымдары",
+          "title_ru": "Базовые структуры данных",
+          "lessons": [
+            {
+              "lesson_id": 41233,
+              "title_ru": "Базовые структуры данных",
+              "url": "https://stepik.org/lesson/41233/step/1",
+              "kind": "lecture_and_practice"
+            },
+            {
+              "lesson_id": 41234,
+              "title_ru": "Задачи",
+              "url": "https://stepik.org/lesson/41234/step/1",
+              "kind": "practice"
+            }
+          ]
+        },
+        {
+          "code": "4.2.2",
+          "title_kk": "Приоритетті кезек және қиылыспайтын жиындар жүйесі",
+          "title_ru": "Очереди с приоритетом и системы непересекающихся множеств",
+          "lessons": [
+            {
+              "lesson_id": 41235,
+              "title_ru": "Очереди с приоритетом",
+              "url": "https://stepik.org/lesson/41235/step/1",
+              "kind": "lecture_and_practice"
+            },
+            {
+              "lesson_id": 41236,
+              "title_ru": "Системы непересекающихся множеств",
+              "url": "https://stepik.org/lesson/41236/step/1",
+              "kind": "lecture_and_practice"
+            },
+            {
+              "lesson_id": 41560,
+              "title_ru": "Задачи",
+              "url": "https://stepik.org/lesson/41560/step/1",
+              "kind": "practice"
+            }
+          ]
+        },
+        {
+          "code": "4.2.3",
+          "title_kk": "Хэш-кестелер",
+          "title_ru": "Хеш-таблицы",
+          "lessons": [
+            {
+              "lesson_id": 41561,
+              "title_ru": "Хеш-таблицы",
+              "url": "https://stepik.org/lesson/41561/step/1",
+              "kind": "lecture_and_practice"
+            },
+            {
+              "lesson_id": 41562,
+              "title_ru": "Задачи",
+              "url": "https://stepik.org/lesson/41562/step/1",
+              "kind": "practice"
+            }
+          ]
+        },
+        {
+          "code": "4.2.4",
+          "title_kk": "Іздеу ағаштары",
+          "title_ru": "Деревья поиска",
+          "lessons": [
+            {
+              "lesson_id": 41563,
+              "title_ru": "АВЛ-деревья",
+              "url": "https://stepik.org/lesson/41563/step/1",
+              "kind": "lecture_and_practice"
+            },
+            {
+              "lesson_id": 45920,
+              "title_ru": "Дополнительные операции",
+              "url": "https://stepik.org/lesson/45920/step/1",
+              "kind": "lecture_and_practice"
+            },
+            {
+              "lesson_id": 41564,
+              "title_ru": "Сплей-деревья",
+              "url": "https://stepik.org/lesson/41564/step/1",
+              "kind": "lecture_and_practice"
+            },
+            {
+              "lesson_id": 45970,
+              "title_ru": "Задачи",
+              "url": "https://stepik.org/lesson/45970/step/1",
+              "kind": "practice"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

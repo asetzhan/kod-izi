@@ -1,0 +1,83 @@
+{
+  "source": "Жаттықтырушының ұсыныстары (тапсырыс беруші жіберген файл)",
+  "rules": [
+    "Контесттен тыс есепке кемінде бір сағат бөлінеді, содан кейін ғана талдау қаралады",
+    "Есеп өз деңгейінен сәл жоғары таңдалады",
+    "Өтіп кеткен контест виртуалды түрде жазылады",
+    "Платформалар қиындығы өсу ретімен: LeetCode, Codeforces, AtCoder",
+    "Жады шектеуі: ACMP-та 16 МБ, ICPC-да көбіне 128–1024 МБ",
+    "Ұсынылатын редактор: CPEditor (тесттерді қайта жазбай іске қосу)"
+  ],
+  "resources": [
+    {
+      "name": "СПбГУ жаттығулары (іздеу)",
+      "url": "https://codeforces.com/gyms?searchByNameOrIdQuery=%D0%A2%D1%80%D0%B5%D0%BD%D0%B8%D1%80%D0%BE%D0%B2%D0%BA%D0%B0+%D0%A1%D0%9F%D0%B1%D0%93%D0%A3&searchByProblem=false",
+      "purpose": "Базалық алгоритмдер бойынша орта қиындықтағы есептер"
+    },
+    {
+      "name": "СПбГУ жаттығуы 100235",
+      "url": "https://codeforces.com/gym/100235",
+      "purpose": "Курстарда алған білімді тексеру"
+    },
+    {
+      "name": "СПбГУ жаттығуы 100166",
+      "url": "https://codeforces.com/gym/100166",
+      "purpose": "Курстарда алған білімді тексеру"
+    },
+    {
+      "name": "СПбГУ жаттығуы 100135",
+      "url": "https://codeforces.com/gym/100135",
+      "purpose": "Курстарда алған білімді тексеру"
+    },
+    {
+      "name": "СПбГУ жаттығуы 100083",
+      "url": "https://codeforces.com/gym/100083",
+      "purpose": "Курстарда алған білімді тексеру"
+    },
+    {
+      "name": "СПбГУ жаттығуы 100091",
+      "url": "https://codeforces.com/gym/100091",
+      "purpose": "Курстарда алған білімді тексеру"
+    },
+    {
+      "name": "Тақырыптар бойынша есептер тізбегі",
+      "url": "https://codeforces.com/blog/entry/55274",
+      "purpose": "Барлық тақырыпқа арналған есептер"
+    },
+    {
+      "name": "Codeforces EDU",
+      "url": "https://codeforces.com/edu/course/2",
+      "purpose": "Тақырыпты басқа курстан қайта оқу"
+    },
+    {
+      "name": "e-maxx",
+      "url": "http://e-maxx.ru/algo/",
+      "purpose": "Түсіндірмесі бар алгоритмдер жинағы"
+    },
+    {
+      "name": "USACO Guide",
+      "url": "https://usaco.guide/dashboard",
+      "purpose": "Қосымша курс"
+    },
+    {
+      "name": "ACMP курсы",
+      "url": "https://acmp.ru/asp/do/index.asp?main=course&id_course=2",
+      "purpose": "Жаңа алгоритмді практикада бекіту"
+    },
+    {
+      "name": "CSES Problem Set",
+      "url": "https://cses.fi/problemset/",
+      "purpose": "Қосымша есеп жинағы"
+    },
+    {
+      "name": "SPOJ Classical",
+      "url": "https://www.spoj.com/problems/classical/",
+      "purpose": "Қосымша есеп жинағы, қиындығы жоғары"
+    },
+    {
+      "name": "Kattis",
+      "url": "https://open.kattis.com/",
+      "purpose": "Қосымша есеп жинағы, қиындығы жоғары"
+    }
+  ]
+}
