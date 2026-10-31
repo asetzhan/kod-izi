@@ -32,6 +32,10 @@ class AuditAction(StrEnum):
     TASK_APPROVED = "task_approved"
     ASSESSMENT_SAVED = "assessment_saved"
     SETTING_CHANGED = "setting_changed"
+    RUBRIC_UPDATED = "rubric_updated"
+    MATERIAL_UPLOADED = "material_uploaded"
+    MATERIAL_BOUND = "material_bound"
+    AI_GRADE_REQUESTED = "ai_grade_requested"
 
 
 def record(

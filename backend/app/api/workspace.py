@@ -20,6 +20,7 @@ from app.core.enums import SubmissionStatus, TraceKind, Verdict
 from app.jobs import get_enqueue
 from app.judge import get_judge
 from app.judge.client import JudgeClient, JudgeUnavailableError, RunStatus
+from app.llm import gateway
 from app.llm.registry import get_provider
 from app.models import (
     AppSetting,
@@ -61,7 +62,6 @@ JUDGE_JOBS_PER_MINUTE = 60  # one job = one program run in Judge0
 SUBMITS_PER_10_MIN = 10
 EVENTS_PER_MINUTE = 300
 EVENTS_PER_SESSION = 20_000
-QUESTION_REQUESTS_PER_DAY = 40
 LLM_CODE_LIMIT = 20_000
 # Offline events of a closed session are accepted for this long after closing.
 LATE_EVENTS_GRACE = timedelta(minutes=30)
@@ -423,12 +423,17 @@ def submit(
     )
     db.add(submission)
     db.flush()
-    day_key = f"questions:{user.id}:{datetime.now(UTC):%Y%m%d}"
-    if _spend(redis, day_key, 1, QUESTION_REQUESTS_PER_DAY, 2 * 86400):
+    provider = get_provider()
+    try:
         questions, source = generate_questions(
-            get_provider(), task.statement_md, body.code[:LLM_CODE_LIMIT], body.ui_language
+            lambda request: gateway.call(
+                db, provider, request, purpose="questions", user_id=user.id
+            ),
+            task.statement_md,
+            body.code[:LLM_CODE_LIMIT],
+            body.ui_language,
         )
-    else:  # LLM quota used up: template questions, no LLM call
+    except gateway.QuotaExceededError:  # LLM quota used up: template questions, no LLM call
         questions, source = template_questions(body.code, body.ui_language), "template"
     db.add(
         Explanation(

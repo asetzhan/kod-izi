@@ -4,7 +4,6 @@
 scenarios against a real Judge0 are in test_judge0_integration.py.
 """
 
-from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -15,104 +14,13 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
 from app.api import workspace
+from app.core.config import get_settings
 from app.jobs import get_enqueue
-from app.judge import get_judge
 from app.main import app
-from app.models import Submission, TraceEvent
-from app.services.grading import grade_submission
+from app.models import TraceEvent
 from tests.conftest import School, login
 from tests.fake_judge import FakeJudge
-
-FEATURES = {"knowledge_actions": 0, "algorithm_freedom": 0, "edge_cases": 1, "justification": 0}
-SOLUTION = "#include <iostream>\nint main() { long long n; std::cin >> n; }\n"
-
-
-@pytest.fixture
-def judge(db: Session) -> Iterator[FakeJudge]:
-    fake = FakeJudge({"4\n": "EVEN\n", "7\n": "ODD\n", "-3\n": "ODD\n"})
-
-    def grade_inline(submission_id: int) -> None:
-        submission = db.get(Submission, submission_id)
-        assert submission is not None
-        grade_submission(db, fake, submission)
-        db.commit()
-
-    app.dependency_overrides[get_judge] = lambda: fake
-    app.dependency_overrides[get_enqueue] = lambda: grade_inline
-    yield fake
-
-
-def _window(start: int, length: int = 120) -> dict[str, str]:
-    begin = datetime.now(UTC) + timedelta(minutes=start)
-    return {
-        "starts_at": begin.isoformat(),
-        "ends_at": (begin + timedelta(minutes=length)).isoformat(),
-    }
-
-
-@pytest.fixture
-def ws(client: TestClient, school: School, judge: FakeJudge) -> dict[str, Any]:
-    teacher = login(client, school["teacher_a"].email)
-    course = client.post("/api/courses", headers=teacher, json={"title": "C++"}).json()
-    client.post(
-        f"/api/courses/{course['id']}/groups", headers=teacher, json={"id": school["group_a"].id}
-    )
-    task = client.post(
-        "/api/tasks",
-        headers=teacher,
-        json={
-            "course_id": course["id"],
-            "title": "Even or odd",
-            "statement_md": "Print EVEN or ODD.",
-            "reference_solution": SOLUTION,
-            "tests": [
-                {"input": "4\n", "expected_output": "EVEN\n", "is_hidden": False},
-                {"input": "7\n", "expected_output": "ODD\n", "is_hidden": True},
-                {"input": "-3\n", "expected_output": "ODD\n", "is_hidden": True},
-            ],
-        },
-    ).json()
-    client.put(f"/api/tasks/{task['id']}/level", headers=teacher, json={"features": FEATURES})
-    client.post(f"/api/tasks/{task['id']}/approve", headers=teacher)
-
-    def assessment(window: dict[str, str], title: str) -> dict[str, Any]:
-        result: dict[str, Any] = client.post(
-            "/api/assessments",
-            headers=teacher,
-            json={"course_id": course["id"], "title": title, "task_ids": [task["id"]], **window},
-        ).json()
-        return result
-
-    return {
-        "teacher": teacher,
-        "student": login(client, school["student_a"].email),
-        "course": course,
-        "task": task,
-        "assessment": assessment(_window(-5), "1-БЖ"),
-        "future": assessment(_window(60), "2-БЖ"),
-        "ended": assessment(_window(-200, 60), "0-БЖ"),
-    }
-
-
-def _open(client: TestClient, ws: dict[str, Any], headers: dict[str, str] | None = None) -> str:
-    response = client.post(
-        "/api/sessions",
-        headers=headers or ws["student"],
-        json={"task_id": ws["task"]["id"], "assessment_id": ws["assessment"]["id"]},
-    )
-    assert response.status_code == 201, response.text
-    session_id: str = response.json()["session_id"]
-    return session_id
-
-
-def _submit(client: TestClient, ws: dict[str, Any], sid: str, code: str = SOLUTION) -> Any:
-    response = client.post(
-        f"/api/sessions/{sid}/submit",
-        headers=ws["student"],
-        json={"code": code, "explanation": "n % 2 тексеремін", "ui_language": "kk"},
-    )
-    assert response.status_code == 201, response.text
-    return client.get(f"/api/submissions/{response.json()['id']}", headers=ws["student"]).json()
+from tests.workspace_helpers import SOLUTION, _open, _submit
 
 
 def test_ft24_student_runs_code_with_own_input(client: TestClient, ws: dict[str, Any]) -> None:
@@ -474,12 +382,7 @@ def test_sec14_one_submission_in_flight_and_limited_per_window(
 def test_ft27_llm_quota_falls_back_to_template_questions(
     client: TestClient, ws: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(workspace, "QUESTION_REQUESTS_PER_DAY", 0)
-
-    def no_llm(*args: object) -> None:
-        raise AssertionError("LLM must not be called over quota")
-
-    monkeypatch.setattr(workspace, "generate_questions", no_llm)
+    monkeypatch.setattr(get_settings(), "llm_daily_quota", 0)
     result = _submit(client, ws, _open(client, ws))
     assert 2 <= len(result["questions"]) <= 3
 

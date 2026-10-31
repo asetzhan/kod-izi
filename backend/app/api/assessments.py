@@ -44,6 +44,7 @@ def _fill(db: DbSession, assessment: Assessment, body: AssessmentIn) -> None:
     assessment.starts_at = body.starts_at
     assessment.ends_at = body.ends_at
     assessment.genai_mode = body.genai_mode.value
+    assessment.teacher_requirements = body.teacher_requirements
     assessment.task_links = [
         AssessmentTask(task_id=task_id, position=i)
         for i, task_id in enumerate(dict.fromkeys(body.task_ids), start=1)

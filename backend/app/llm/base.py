@@ -1,4 +1,4 @@
-"""LLM gateway interface (ФТ-46). Real providers are added in stage 3."""
+"""LLM gateway interface (ФТ-46). Q-08/Q-09: production uses a local model (Ollama)."""
 
 from dataclasses import dataclass, field
 from typing import Any, Protocol
@@ -8,11 +8,12 @@ from typing import Any, Protocol
 class LLMRequest:
     system: str
     # Untrusted inputs (student code, explanation, book fragments) go here, never into
-    # `system`; providers render them as separate <data> blocks.
+    # `system`; they are rendered as separate <data> blocks (spec 14.1).
     data_blocks: dict[str, str] = field(default_factory=dict)
     response_schema: dict[str, Any] | None = None
     prompt_version: str = "unversioned"
     model: str | None = None
+    max_output_tokens: int = 2048
 
 
 @dataclass(frozen=True)
@@ -28,3 +29,14 @@ class LLMProvider(Protocol):
     name: str
 
     def complete(self, request: LLMRequest) -> LLMResponse: ...
+
+    def embed(self, texts: list[str]) -> list[list[float]]: ...
+
+
+def render_data_blocks(blocks: dict[str, str]) -> str:
+    """Wrap each input in its own <data> block; a closing tag inside the data cannot end it."""
+    parts = []
+    for name, content in blocks.items():
+        safe = content.replace("</data", "<\\/data").replace("<data", "<\\data")
+        parts.append(f'<data name="{name}">\n{safe}\n</data>')
+    return "\n\n".join(parts)

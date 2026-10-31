@@ -54,6 +54,8 @@ class Task(Base):
     reference_language: Mapped[str] = mapped_column(String(16), default="cpp17")
     source_url: Mapped[str | None] = mapped_column(String(500))
     source_note: Mapped[str] = mapped_column(Text, default="", server_default="")
+    # ФТ-16: the teacher's book-based requirements (required method, style, banned tools).
+    teacher_requirements: Mapped[str] = mapped_column(Text, default="", server_default="")
 
     # Level features (spec 5.2), 0–2 each. NULL until suggested or set.
     feat_knowledge_actions: Mapped[int | None] = mapped_column(SmallInteger)

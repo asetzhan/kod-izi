@@ -1,3 +1,14 @@
+from app.models.analysis import (
+    AiGrade,
+    AiMessage,
+    Chunk,
+    LlmUsage,
+    Material,
+    MaterialBinding,
+    MaterialVersion,
+    Rubric,
+    RubricCriterion,
+)
 from app.models.assessment import Assessment, AssessmentTask
 from app.models.audit import AuditLog
 from app.models.auth import RefreshToken
@@ -22,10 +33,13 @@ from app.models.task import Task, TaskKnowledgeComponent, TestCase
 from app.models.user import User, UserRole
 
 __all__ = [
+    "AiGrade",
+    "AiMessage",
     "AppSetting",
     "Assessment",
     "AssessmentTask",
     "AuditLog",
+    "Chunk",
     "Course",
     "CourseGroup",
     "CourseTeacher",
@@ -35,7 +49,13 @@ __all__ = [
     "GroupMember",
     "GroupTeacher",
     "KnowledgeComponent",
+    "LlmUsage",
+    "Material",
+    "MaterialBinding",
+    "MaterialVersion",
     "RefreshToken",
+    "Rubric",
+    "RubricCriterion",
     "Submission",
     "SubmissionTestResult",
     "Task",

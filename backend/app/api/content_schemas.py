@@ -150,6 +150,7 @@ class TaskIn(BaseModel):
     reference_language: str = Field(default="cpp17", pattern="^cpp(17|20)$")
     source_url: HttpUrl | None = None
     source_note: str = Field(default="", max_length=5000)
+    teacher_requirements: str = Field(default="", max_length=10_000)
     tests: list[TestCaseIn] = Field(default_factory=list, max_length=500)
     knowledge_component_ids: list[int] = Field(default_factory=list, max_length=50)
 
@@ -197,6 +198,7 @@ class TaskOut(TaskSummary):
     reference_language: str
     source_url: str | None
     source_note: str
+    teacher_requirements: str
     features: dict[str, int | None]
     level_rationale: str
     tests: list[TestCaseOut]
@@ -220,6 +222,7 @@ class TaskOut(TaskSummary):
                         "source_url",
                         "source_note",
                         "level_rationale",
+                        "teacher_requirements",
                     )
                 },
                 "features": task.features(),
@@ -269,6 +272,7 @@ class AssessmentIn(BaseModel):
     ends_at: datetime
     genai_mode: GenAiMode = GenAiMode.FORBIDDEN
     task_ids: list[int] = Field(default_factory=list, max_length=100)
+    teacher_requirements: str = Field(default="", max_length=10_000)
 
     @model_validator(mode="after")
     def _window(self) -> Self:
@@ -291,6 +295,7 @@ class AssessmentOut(BaseModel):
     ends_at: datetime
     genai_mode: GenAiMode
     task_ids: list[int]
+    teacher_requirements: str = ""
 
     @classmethod
     def build(cls, a: Assessment) -> "AssessmentOut":
@@ -302,6 +307,7 @@ class AssessmentOut(BaseModel):
             ends_at=a.ends_at,
             genai_mode=GenAiMode(a.genai_mode),
             task_ids=[link.task_id for link in a.task_links],
+            teacher_requirements=a.teacher_requirements,
         )
 
 

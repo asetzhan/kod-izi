@@ -2,6 +2,7 @@ from fastapi import FastAPI
 
 from app.api import (
     admin,
+    analysis,
     app_settings,
     assessments,
     auth,
@@ -32,6 +33,7 @@ def create_app() -> FastAPI:
         assessments,
         app_settings,
         workspace,
+        analysis,
     ):
         app.include_router(module.router)
     return app

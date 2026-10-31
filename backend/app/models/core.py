@@ -115,6 +115,8 @@ class Submission(Base):
     max_time_ms: Mapped[int | None] = mapped_column(Integer)
     max_memory_kb: Mapped[int | None] = mapped_column(Integer)
     compile_output: Mapped[str] = mapped_column(Text, default="", server_default="")
+    # ФТ-32: clang-tidy and cppcheck warnings, complexity metrics.
+    static_analysis: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     error: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
