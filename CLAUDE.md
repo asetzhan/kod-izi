@@ -4,7 +4,7 @@
 
 - Талаптар: docs/spec/README.md (бөлімдер тізімі). Әр талаптың ID-і бар: ФТ-NN, ОТ-NN.
 - Педагогикалық мазмұн: docs/spec/dissertation/. Оны өзгертпе, тек кодқа аудар.
-- Бастапқы деректер: seed/.
+- Бастапқы деректер: seed/. Тапсырма пакетінің форматы: docs/formats/task-package.md.
 - Ашық сұрақтар: docs/spec/questions.md.
 - Терминдер: @docs/spec/glossary.md
 
@@ -21,7 +21,7 @@
 - `make dev` — барлық сервисті docker compose арқылы іске қосу
 - `make test` — backend және frontend тесттері
 - `make lint` — ruff, mypy, eslint, tsc
-- `make seed` — seed/ деректерін дерекқорға жүктеу (0-кезеңде тек dev демо-аккаунттары)
+- `make seed` — seed/ деректерін дерекқорға жүктеу (курстар, Stepik сабақтары, білім компоненттері, эксперимент тапсырмаларының жобасы; dev ортасында демо-аккаунттар)
 - `make migrate` — Alembic миграцияларын орындау
 - `make create-admin EMAIL=...` — бірінші әкімшіні жасау
 - `make down`, `make logs` — сервистерді тоқтату, логтарды көру
