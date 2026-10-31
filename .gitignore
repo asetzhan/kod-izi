@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+secrets/
+__pycache__/
+*.egg-info/
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+node_modules/
+dist/
