@@ -20,7 +20,10 @@ from app.services.auth import (
     revoke_by_raw,
     rotate_refresh_token,
 )
+from app.services.privacy import email_hash
 from app.services.rate_limit import LoginRateLimiter
+from app.services.two_factor import accept as accept_totp
+from app.services.two_factor import has_second_factor, needs_second_factor
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -83,7 +86,13 @@ def login(
 
     if not limiter.register_attempt(email, ip):
         audit.record(
-            db, AuditAction.LOGIN_FAILED, ip=ip, details={"email": email, "reason": "rate_limited"}
+            db,
+            AuditAction.LOGIN_FAILED,
+            ip=ip,
+            details={
+                "email_hash": email_hash(email, settings.jwt_secret),
+                "reason": "rate_limited",
+            },
         )
         db.commit()
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, detail="too_many_attempts")
@@ -94,10 +103,26 @@ def login(
             db,
             AuditAction.LOGIN_FAILED,
             ip=ip,
-            details={"email": email, "reason": "invalid_credentials"},
+            details={
+                "email_hash": email_hash(email, settings.jwt_secret),
+                "reason": "invalid_credentials",
+            },
         )
         db.commit()
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="invalid_credentials")
+
+    if needs_second_factor(user) and has_second_factor(user):
+        reason = None
+        if not body.otp:
+            reason = "otp_required"
+        elif not accept_totp(user, str(user.totp_secret), body.otp):
+            reason = "otp_invalid"
+        if reason is not None:
+            audit.record(
+                db, AuditAction.LOGIN_FAILED, actor_id=user.id, ip=ip, details={"reason": reason}
+            )
+            db.commit()
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail=reason)
 
     limiter.reset(email, ip)
     refresh_raw = issue_refresh_token(

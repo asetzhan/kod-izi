@@ -382,18 +382,27 @@ def test_ft06_students_see_material_list_but_not_the_file(
     ).json()
     listed = client.get(f"/api/courses/{ws['course']['id']}/materials", headers=ws["student"])
     assert [m["id"] for m in listed.json()] == [material["id"]]
-    assert (
-        client.get(f"/api/materials/{material['id']}/file", headers=ws["student"]).status_code
-        == 403
-    )
+    link_url = f"/api/materials/{material['id']}/link"
+    assert client.post(link_url, headers=ws["student"]).status_code == 403
+    assert client.get(
+        f"/api/materials/{material['id']}/file", headers=ws["student"]
+    ).status_code in (403, 422)
     outsider = login(client, school["student_b"].email)
     assert (
         client.get(f"/api/courses/{ws['course']['id']}/materials", headers=outsider).status_code
         == 403
     )
-    file = client.get(f"/api/materials/{material['id']}/file", headers=ws["teacher"])
+    link = client.post(link_url, headers=ws["teacher"]).json()
+    client.cookies.clear()
+    file = client.get(link["url"])  # the signed link itself is the permission (spec 14.1)
     assert file.status_code == 200 and file.content.startswith(b"%PDF")
     assert "attachment" in file.headers["content-disposition"]
+    tampered = link["url"].replace("sig=", "sig=0")
+    assert client.get(tampered).status_code == 403
+    expired = link["url"].replace(
+        f"expires={link['expires']}", f"expires={link['expires'] - 10_000}"
+    )
+    assert client.get(expired).status_code == 403
 
 
 def test_sec14_zip_bombs_in_office_and_epub_files_are_refused() -> None:

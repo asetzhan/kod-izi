@@ -4,7 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,9 +20,24 @@ class Settings(BaseSettings):
     login_max_attempts: int = 5
     login_window_seconds: int = 900
     cookie_secure: bool = True
+    # Spec 14.1: teachers and administrators must use TOTP.
+    require_2fa_for_staff: bool = True
+    # Spec 14.3: personal data is kept for this many days after the pilot, then anonymized.
+    retention_days: int = 365
+    consent_version: str = "2026-1"
+    require_consent: bool = True
+    # Non-superuser role the application switches to (migration 0006); empty disables.
+    db_app_role: str = Field(default="kodizi_app", pattern=r"^([a-z_][a-z0-9_]{0,62})?$")
+    # Signed, short-lived links to material files (spec 14.1).
+    file_link_ttl_seconds: int = 300
     llm_provider: str = "fake"
     judge0_url: str = "http://judge0-server:2358"
     judge0_authn_token: str = ""
+    # Load tests without Judge0 only: `simulated` (refused when APP_ENV=prod).
+    judge_backend: Literal["judge0", "simulated"] = "judge0"
+    simulated_judge_delay_s: float = 0.2
+    # Load tests without an RQ worker only: grade in a thread of the API process.
+    grading_inline: bool = False
     # Repository seed/ directory (mounted at /seed in docker).
     seed_dir: Path = Path(__file__).resolve().parents[3] / "seed"
     max_import_bytes: int = 10 * 1024 * 1024
@@ -36,6 +51,26 @@ class Settings(BaseSettings):
     max_material_bytes: int = 50 * 1024 * 1024
     clamav_host: str = "clamav"
     clamav_port: int = 3310
+
+    @model_validator(mode="after")
+    def _safe_in_production(self) -> "Settings":
+        """Load-test and development switches must not reach production (spec 14.1)."""
+        if self.app_env == "prod":
+            unsafe = [
+                name
+                for name, bad in (
+                    ("REQUIRE_2FA_FOR_STAFF", not self.require_2fa_for_staff),
+                    ("REQUIRE_CONSENT", not self.require_consent),
+                    ("DB_APP_ROLE", not self.db_app_role),
+                    ("JUDGE_BACKEND", self.judge_backend != "judge0"),
+                    ("GRADING_INLINE", self.grading_inline),
+                    ("COOKIE_SECURE", not self.cookie_secure),
+                )
+                if bad
+            ]
+            if unsafe:
+                raise ValueError(f"not allowed when APP_ENV=prod: {', '.join(unsafe)}")
+        return self
 
 
 @lru_cache

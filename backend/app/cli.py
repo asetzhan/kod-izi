@@ -12,8 +12,11 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.roles import Role
 from app.core.security import hash_password
+from app.db.context import set_system
 from app.db.session import get_sessionmaker
 from app.models import Course, CourseGroup, CourseTeacher, Group, GroupMember, GroupTeacher, User
+from app.services.privacy import apply_retention
+from app.services.research import agreement
 from app.services.seed_content import PART1_STEPIK_ID, seed_all
 
 DEMO_USERS = [
@@ -44,6 +47,7 @@ def create_admin(email: str, full_name: str) -> int:
         print("Passwords differ or are shorter than 12 characters.", file=sys.stderr)
         return 1
     with get_sessionmaker()() as db:
+        set_system(db)
         _, created = _get_or_create_user(db, email.lower(), full_name, password, {Role.ADMIN})
         if not created:
             print(f"User {email} already exists.", file=sys.stderr)
@@ -60,6 +64,7 @@ def seed_demo() -> int:
         return 1
     password = os.environ.get("DEMO_PASSWORD") or secrets.token_urlsafe(12)
     with get_sessionmaker()() as db:
+        set_system(db)
         users = {}
         for email, name, roles in DEMO_USERS:
             users[email], created = _get_or_create_user(db, email, name, password, roles)
@@ -80,6 +85,7 @@ def seed_demo() -> int:
 def seed() -> int:
     """`make seed`: course catalogue and draft tasks; demo accounts too when APP_ENV=dev."""
     with get_sessionmaker()() as db:
+        set_system(db)
         report = seed_all(db, get_settings().seed_dir)
         db.commit()
     print(
@@ -91,6 +97,7 @@ def seed() -> int:
         return 0
     result = seed_demo()
     with get_sessionmaker()() as db:
+        set_system(db)
         course = db.scalar(select(Course).where(Course.stepik_course_id == PART1_STEPIK_ID))
         teacher = db.scalar(select(User).where(User.email == "teacher@example.com"))
         group = db.scalar(select(Group).where(Group.name == "Demo group"))
@@ -102,6 +109,31 @@ def seed() -> int:
     return result
 
 
+def retention() -> int:
+    """Spec 14.3: anonymize students past the retention period or without consent."""
+    with get_sessionmaker()() as db:
+        set_system(db)
+        done = apply_retention(db, get_settings().retention_days)
+        db.commit()
+    print(f"anonymized {len(done)} user(s)")
+    return 0
+
+
+def agreement_report(path: str) -> int:
+    """ФТ-49: agreement statistics from an exported CSV (ai_S/teacher_S, ai_F/teacher_F...)."""
+    import csv
+
+    with open(path, encoding="utf-8") as handle:
+        rows = [r for r in csv.DictReader(handle) if r.get("ai_S")]
+    for key in ("S", "F", "E", "A"):
+        stats = agreement(
+            [float(r[f"ai_{key}"]) for r in rows], [float(r[f"teacher_{key}"]) for r in rows]
+        )
+        print(key, stats)
+    print("baseline (dissertation, Claude): MAE = 7.34, r = 0.647")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="app.cli")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -110,7 +142,14 @@ def main(argv: list[str] | None = None) -> int:
     admin.add_argument("--full-name", default="Administrator")
     sub.add_parser("seed-demo")
     sub.add_parser("seed")
+    sub.add_parser("retention")
+    report = sub.add_parser("agreement")
+    report.add_argument("csv_path")
     args = parser.parse_args(argv)
+    if args.command == "retention":
+        return retention()
+    if args.command == "agreement":
+        return agreement_report(args.csv_path)
     if args.command == "create-admin":
         return create_admin(args.email, args.full_name)
     if args.command == "seed":

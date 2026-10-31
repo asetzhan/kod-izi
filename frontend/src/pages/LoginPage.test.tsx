@@ -13,6 +13,7 @@ const student = {
   full_name: "Demo Student",
   roles: ["student"],
   is_active: true,
+  consent_version: "2026-1",
 };
 
 function json(status: number, body: unknown): Response {

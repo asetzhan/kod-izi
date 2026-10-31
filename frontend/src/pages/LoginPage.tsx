@@ -6,6 +6,8 @@ import { ApiError } from "../api/client";
 import { homeFor, useAuth } from "../auth/AuthContext";
 
 function errorKey(error: unknown): string {
+  if (error instanceof ApiError && error.detail === "otp_required") return "login.errors.otpRequired";
+  if (error instanceof ApiError && error.detail === "otp_invalid") return "login.errors.otpInvalid";
   if (error instanceof ApiError && error.status === 401) return "login.errors.invalid";
   if (error instanceof ApiError && error.status === 429) return "login.errors.tooMany";
   return "login.errors.generic";
@@ -18,6 +20,8 @@ export function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [otp, setOtp] = useState("");
+  const [askOtp, setAskOtp] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   if (user) return <Navigate to={homeFor(user)} replace />;
@@ -27,9 +31,10 @@ export function LoginPage() {
     setSubmitting(true);
     setError(null);
     try {
-      const signedIn = await signIn(email, password);
+      const signedIn = await signIn(email, password, askOtp ? otp : undefined);
       navigate(homeFor(signedIn), { replace: true });
     } catch (caught) {
+      if (caught instanceof ApiError && String(caught.detail).startsWith("otp_")) setAskOtp(true);
       setError(errorKey(caught));
     } finally {
       setSubmitting(false);
@@ -59,6 +64,19 @@ export function LoginPage() {
           onChange={(event) => setPassword(event.target.value)}
         />
       </label>
+      {askOtp && (
+        <label>
+          {t("login.otp")}
+          <input
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            maxLength={6}
+            required
+            value={otp}
+            onChange={(event) => setOtp(event.target.value)}
+          />
+        </label>
+      )}
       {error && <p role="alert">{t(error)}</p>}
       <button type="submit" disabled={submitting}>
         {t("login.submit")}

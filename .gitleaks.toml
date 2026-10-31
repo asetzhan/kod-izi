@@ -1,0 +1,10 @@
+# Default gitleaks rules plus known fake values used in tests.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Fake test values, not secrets"
+regexes = [
+  # Fake TOTP secret in frontend/src/pages/privacy.test.tsx.
+  '''ABCDEF234567''',
+]

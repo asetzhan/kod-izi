@@ -9,7 +9,9 @@ import { RequireRole } from "./auth/RequireRole";
 import { Layout } from "./components/Layout";
 import { CabinetPage } from "./pages/CabinetPage";
 import { ChooseRolePage } from "./pages/ChooseRolePage";
+import { ConsentPage } from "./pages/ConsentPage";
 import { LoginPage } from "./pages/LoginPage";
+import { SecurityPage } from "./pages/SecurityPage";
 import { AssessmentPage } from "./pages/student/AssessmentPage";
 import { ResultsPage } from "./pages/student/ResultsPage";
 import { StudentHomePage } from "./pages/student/StudentHomePage";
@@ -42,6 +44,8 @@ export function App() {
     <Routes>
       <Route element={<Layout />}>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/security" element={<SecurityPage />} />
+        <Route path="/consent" element={<ConsentPage />} />
         <Route
           path="/choose-role"
           element={

@@ -40,7 +40,9 @@ jobs:
           cache: pip
           cache-dependency-path: backend/pyproject.toml
       - name: Install cppcheck (static analysis tests)
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends cppcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cppcheck postgresql-client-16
       - run: pip install -e ".[dev]"
       - name: ruff
         run: ruff format --check . && ruff check . && ruff check ../.claude/hooks

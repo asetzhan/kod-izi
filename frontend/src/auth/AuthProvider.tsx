@@ -17,10 +17,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false));
   }, []);
 
-  const signIn = useCallback(async (email: string, password: string) => {
-    const signedIn = await api.login(email, password);
+  const signIn = useCallback(async (email: string, password: string, otp?: string) => {
+    const signedIn = await api.login(email, password, otp);
     setUser(signedIn);
     return signedIn;
+  }, []);
+
+  const refreshUser = useCallback(async () => {
+    setUser(await api.apiGet<api.User>("/api/me"));
   }, []);
 
   const signOut = useCallback(async () => {
@@ -30,8 +34,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const value = useMemo<AuthState>(
-    () => ({ user, loading, signIn, signOut }),
-    [user, loading, signIn, signOut],
+    () => ({ user, loading, signIn, signOut, refreshUser }),
+    [user, loading, signIn, signOut, refreshUser],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

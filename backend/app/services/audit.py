@@ -40,6 +40,13 @@ class AuditAction(StrEnum):
     COMPONENT_GENERATED = "component_generated"
     GRADE_CONFIRMED = "grade_confirmed"
     OBSERVATION_ADDED = "observation_added"
+    TWO_FACTOR_ENABLED = "two_factor_enabled"
+    TWO_FACTOR_RESET = "two_factor_reset"
+    CONSENT_GIVEN = "consent_given"
+    CONSENT_WITHDRAWN = "consent_withdrawn"
+    USER_ANONYMIZED = "user_anonymized"
+    DATA_EXPORTED = "data_exported"
+    FILE_LINK_ISSUED = "file_link_issued"
 
 
 def record(

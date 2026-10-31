@@ -35,6 +35,7 @@ export function MaterialsPage() {
                 </li>
               ))}
             </ul>
+            {m.versions.some((v) => v.status === "ready") && <DownloadButton materialId={m.id} />}
             <BindingForm material={m} course={course.data} tasks={tasks.data ?? []} />
           </article>
         ))}
@@ -211,5 +212,27 @@ function BindingForm({
         {error !== null && <ErrorText error={error} />}
       </form>
     </div>
+  );
+}
+
+/** Spec 14.1: the file is served by a signed link valid for a few minutes. */
+function DownloadButton({ materialId }: { materialId: number }) {
+  const { t } = useTranslation();
+  const [error, setError] = useState<unknown>(null);
+  const open = async () => {
+    try {
+      const link = await apiSend<{ url: string }>("POST", `/api/materials/${materialId}/link`);
+      window.location.assign(link.url);
+    } catch (caught) {
+      setError(caught);
+    }
+  };
+  return (
+    <>
+      <button type="button" className="link" onClick={open}>
+        {t("materials.download")}
+      </button>
+      {error !== null && <ErrorText error={error} />}
+    </>
   );
 }
