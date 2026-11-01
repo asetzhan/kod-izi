@@ -151,9 +151,9 @@ def _find_csv(out_dir: Path) -> str:
         return path.read_text(encoding="utf-8", errors="replace")
     for archive in out_dir.rglob("*.jplag"):
         with zipfile.ZipFile(archive) as z:
-            for name in z.namelist():
-                if name.endswith(".csv"):
-                    return z.read(name).decode("utf-8", errors="replace")
+            for info in z.infolist():
+                if info.filename.endswith(".csv") and info.file_size <= 10 * 1024**2:
+                    return z.read(info).decode("utf-8", errors="replace")
     raise RuntimeError("JPlag wrote no CSV")
 
 
@@ -173,6 +173,7 @@ def jplag_pairs(codes: Mapping[int, str], jar: Path) -> list[dict[str, Any]]:
         subprocess.run(  # noqa: S603  # nosec B603
             [
                 java,
+                "-Xmx1g",
                 "-jar",
                 str(jar),
                 "-l",

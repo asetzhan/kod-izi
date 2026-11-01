@@ -186,6 +186,8 @@ def generate_task(
         title = _text(answer["title"], 200)
         statement = _text(answer["statement"], 20_000)
         solution = str(answer["reference_solution"])[:100_000]
+        if not isinstance(answer["tests"], list):
+            raise TypeError("tests must be a list")
         inputs = [str(t)[:100_000] for t in answer["tests"]][:MAX_TESTS]
     except (ValueError, KeyError, TypeError):
         raise GenerationError("llm_bad_answer") from None
@@ -258,6 +260,8 @@ def extract_problems(
     response = gateway.call(db, provider, request, purpose="generation", user_id=author_id)
     try:
         problems = json.loads(response.text)["problems"]
+        if not isinstance(problems, list):
+            raise TypeError("problems must be a list")
     except (ValueError, KeyError, TypeError):
         raise GenerationError("llm_bad_answer") from None
     page = chunks[0].page
@@ -269,9 +273,10 @@ def extract_problems(
         title, statement = _text(item.get("title"), 200), _text(item.get("statement"), 20_000)
         if not title or not statement:
             continue
+        raw_examples = item.get("examples", [])
         examples = [
             ImportedTest(str(e.get("input", "")), str(e.get("output", "")), is_hidden=False)
-            for e in item.get("examples", [])[:10]
+            for e in (raw_examples if isinstance(raw_examples, list) else [])[:10]
             if isinstance(e, dict) and str(e.get("input", "")).strip()
         ]
         draft = TaskDraftData(

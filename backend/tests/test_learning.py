@@ -5,13 +5,13 @@ import json
 import random
 import shutil
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 from pypdf import PdfWriter
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.core.roles import Role
@@ -447,3 +447,67 @@ def test_ft37_tesseract_reads_kazakh_and_russian() -> None:
     from app.services.extract import tesseract_ocr
 
     assert tesseract_ocr(_pdf_with_blank_page(), [1]).get(1, "").strip() == ""
+
+
+def test_ft21_ft23_ft39_other_courses_are_closed(
+    client: TestClient,
+    modelled: dict[str, Any],
+    collection: MaterialVersion,
+    school: School,
+    db: Session,
+) -> None:
+    ws = modelled
+    other_teacher = login(client, school["teacher_b"].email)
+    other_course = client.post("/api/courses", headers=other_teacher, json={"title": "B"}).json()
+    # A book of course A cannot feed a draft of course B, nor be read or split by its teacher.
+    topic = Topic(course_id=other_course["id"], code="1.1", title="B", position=1)
+    db.add(topic)
+    db.flush()
+    stolen = client.post(
+        f"/api/courses/{other_course['id']}/tasks/generate",
+        headers=other_teacher,
+        json={"topic_id": topic.id, "version_id": collection.id, "chapter": "1-тарау"},
+    )
+    assert stolen.status_code == 403
+    chapters = f"/api/materials/{collection.material_id}/versions/{collection.id}/chapters"
+    assert client.get(chapters, headers=other_teacher).status_code == 403
+    extract = f"/api/materials/{collection.material_id}/extract-problems"
+    assert (
+        client.post(extract, headers=other_teacher, json={"version_id": collection.id}).status_code
+        == 403
+    )
+    # A student sees progress only in courses they study.
+    other_student = login(client, school["student_b"].email)
+    assert (
+        client.get(
+            f"/api/my/progress?course_id={ws['course']['id']}", headers=other_student
+        ).status_code
+        == 403
+    )
+
+
+def test_ft39_degenerate_bkt_parameters_are_refused(client: TestClient, school: School) -> None:
+    admin = login(client, school["admin"].email)
+    bad = {"p_init": 0.0, "p_transit": 0.1, "p_slip": 0.1, "p_guess": 0.0, "threshold": 0.95}
+    assert client.put("/api/settings/bkt", headers=admin, json=bad).status_code == 422
+
+
+@pytest.mark.usefixtures("inline_similarity")
+def test_ft30_a_stuck_analysis_does_not_block_new_ones(
+    client: TestClient, ws: dict[str, Any], db: Session
+) -> None:
+    stuck = SimilarityReport(assessment_id=ws["assessment"]["id"], task_id=ws["task"]["id"])
+    db.add(stuck)
+    db.flush()
+    db.execute(
+        update(SimilarityReport)
+        .where(SimilarityReport.id == stuck.id)
+        .values(created_at=datetime.now(UTC) - timedelta(hours=1))
+    )
+    url = f"/api/assessments/{ws['assessment']['id']}/similarity"
+    assert (
+        client.post(url, headers=ws["teacher"], json={"task_id": ws["task"]["id"]}).status_code
+        == 202
+    )
+    db.refresh(stuck)
+    assert stuck.status == "failed"

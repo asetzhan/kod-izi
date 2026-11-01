@@ -53,6 +53,7 @@ class AuditAction(StrEnum):
     TASK_ASSIGNED = "task_assigned"
     TASK_UNASSIGNED = "task_unassigned"
     TASK_GENERATED = "task_generated"
+    SIMILARITY_STARTED = "similarity_started"
     RUBRIC_EXAMPLE_ADDED = "rubric_example_added"
     RUBRIC_EXAMPLE_REMOVED = "rubric_example_removed"
 

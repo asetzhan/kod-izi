@@ -165,6 +165,11 @@ services:
       JPLAG_JAR: /opt/jplag/jplag.jar
     mem_limit: 2g
     pids_limit: 256
+    cpus: 2
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
     networks: [data]
     depends_on:
       redis:

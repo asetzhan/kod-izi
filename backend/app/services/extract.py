@@ -9,9 +9,11 @@ Russian (ФТ-37).
 import io
 import posixpath
 import re
+import resource
 import shutil
 import subprocess  # nosec B404
 import tempfile
+import time
 import zipfile
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -28,8 +30,11 @@ CHUNK_OVERLAP = 150
 # A PDF page with less text than this is treated as a scan (ФТ-37).
 MIN_PAGE_TEXT = 20
 OCR_LANGUAGES = "kaz+rus"
-OCR_DPI = 300
-OCR_TIMEOUT_S = 120
+OCR_MAX_PIXELS = 3000  # longest side of a rendered page: a huge page cannot exhaust memory
+OCR_TIMEOUT_S = 60  # per tool and page
+OCR_BUDGET_S = 420  # all OCR of one book: stays inside the 600 s material job
+OCR_MAX_PAGES = 200
+OCR_MEMORY = 1024**3
 
 # pdf bytes, 1-based page numbers → recognised text per page
 Ocr = Callable[[bytes, list[int]], dict[int, str]]
@@ -99,10 +104,18 @@ def detect_type(filename: str, data: bytes) -> str:
 # Extraction ----------------------------------------------------------------------------
 
 
+def _ocr_limits() -> None:
+    """Memory and CPU limits of the poppler and tesseract processes."""
+    resource.setrlimit(resource.RLIMIT_AS, (OCR_MEMORY, OCR_MEMORY))
+    resource.setrlimit(resource.RLIMIT_CPU, (OCR_TIMEOUT_S, OCR_TIMEOUT_S))
+
+
 def tesseract_ocr(data: bytes, numbers: list[int]) -> dict[int, str]:
     """Render each page with poppler and recognise it with Tesseract (kaz+rus). Missing
-    tools or a failed page give no text for that page instead of failing the book."""
+    tools, a failed page or the spent time budget give no text for the remaining pages
+    instead of failing the book."""
     out: dict[int, str] = {}
+    deadline = time.monotonic() + OCR_BUDGET_S
     pdftoppm, tesseract = shutil.which("pdftoppm"), shutil.which("tesseract")
     if pdftoppm is None or tesseract is None:
         return out
@@ -110,6 +123,8 @@ def tesseract_ocr(data: bytes, numbers: list[int]) -> dict[int, str]:
         pdf = Path(tmp) / "book.pdf"
         pdf.write_bytes(data)
         for number in numbers:
+            if time.monotonic() > deadline:
+                break
             image = Path(tmp) / f"page{number}"
             try:
                 subprocess.run(  # noqa: S603  # nosec B603
@@ -119,8 +134,8 @@ def tesseract_ocr(data: bytes, numbers: list[int]) -> dict[int, str]:
                         str(number),
                         "-l",
                         str(number),
-                        "-r",
-                        str(OCR_DPI),
+                        "-scale-to",
+                        str(OCR_MAX_PIXELS),
                         "-gray",
                         "-png",
                         "-singlefile",
@@ -130,20 +145,26 @@ def tesseract_ocr(data: bytes, numbers: list[int]) -> dict[int, str]:
                     check=True,
                     capture_output=True,
                     timeout=OCR_TIMEOUT_S,
+                    preexec_fn=_ocr_limits,  # nosec B602
                 )
                 result = subprocess.run(  # noqa: S603  # nosec B603
                     [tesseract, f"{image}.png", "stdout", "-l", OCR_LANGUAGES],
                     check=True,
                     capture_output=True,
                     timeout=OCR_TIMEOUT_S,
+                    preexec_fn=_ocr_limits,  # nosec B602
                 )
             except (OSError, subprocess.SubprocessError):
                 continue
+            finally:
+                Path(f"{image}.png").unlink(missing_ok=True)  # do not keep page images
             out[number] = result.stdout.decode("utf-8", errors="replace")
     return out
 
 
-def extract_pdf(data: bytes, ocr: Ocr | None = None, max_ocr_pages: int = 500) -> list[Page]:
+def extract_pdf(
+    data: bytes, ocr: Ocr | None = None, max_ocr_pages: int = OCR_MAX_PAGES
+) -> list[Page]:
     from pypdf import PdfReader
     from pypdf.errors import PdfReadError
 

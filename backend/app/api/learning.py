@@ -3,11 +3,12 @@ drafts (ФТ-21) and problem extraction (ФТ-23), code similarity (ФТ-30).
 """
 
 from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
 from app.api.content_schemas import TaskSummary
 from app.api.deps import AdminUser, CurrentUser, DbSession, client_ip
@@ -46,6 +47,7 @@ Judge = Annotated[JudgeClient, Depends(get_judge)]
 Enqueue = Annotated[Callable[[int], None], Depends(get_similarity_enqueue)]
 # One generation per course at a time: each one calls the model and Judge0.
 GENERATION_LOCK = 4_710_006
+STALE_AFTER = timedelta(minutes=20)  # longer than the analyzer's 900 s job timeout
 
 
 def _forbidden() -> HTTPException:
@@ -321,11 +323,25 @@ class ReportOut(BaseModel):
 
 @router.post("/assessments/{assessment_id}/similarity", status_code=status.HTTP_202_ACCEPTED)
 def start_similarity(
-    assessment_id: int, body: SimilarityIn, user: CurrentUser, db: DbSession, enqueue: Enqueue
+    assessment_id: int,
+    body: SimilarityIn,
+    request: Request,
+    user: CurrentUser,
+    db: DbSession,
+    enqueue: Enqueue,
 ) -> ReportOut:
     assessment = _assessment_for_teacher(db, user, assessment_id)
     if db.get(AssessmentTask, (assessment.id, body.task_id)) is None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail="task_not_in_assessment")
+    # A job killed in the worker (OOM, restart) must not block new analyses forever.
+    db.execute(
+        update(SimilarityReport)
+        .where(
+            SimilarityReport.status == "pending",
+            SimilarityReport.created_at < datetime.now(UTC) - STALE_AFTER,
+        )
+        .values(status="failed", error="the analysis did not finish", finished_at=datetime.now(UTC))
+    )
     running = db.scalar(
         select(SimilarityReport.id).where(
             SimilarityReport.assessment_id == assessment.id,
@@ -337,6 +353,16 @@ def start_similarity(
         raise HTTPException(status.HTTP_409_CONFLICT, detail="analysis_running")
     report = SimilarityReport(assessment_id=assessment.id, task_id=body.task_id, created_by=user.id)
     db.add(report)
+    db.flush()
+    audit.record(
+        db,
+        AuditAction.SIMILARITY_STARTED,
+        actor_id=user.id,
+        object_type="assessment",
+        object_id=assessment.id,
+        ip=client_ip(request),
+        details={"task_id": body.task_id, "report_id": report.id},
+    )
     db.commit()
     enqueue(report.id)
     db.refresh(report)

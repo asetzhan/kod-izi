@@ -37,10 +37,11 @@ BKT_KEY = "bkt"
 class BktParams(BaseModel):
     """Changed by an administrator; to be fitted on pilot data (`fit`)."""
 
-    p_init: float = Field(default=0.2, ge=0.0, le=1.0)  # P(L0): known before the course
-    p_transit: float = Field(default=0.15, ge=0.0, le=1.0)  # learns it after an attempt
-    p_slip: float = Field(default=0.1, ge=0.0, le=0.5)  # knows it, still fails
-    p_guess: float = Field(default=0.2, ge=0.0, le=0.5)  # does not know it, still passes
+    # Strictly between 0 and 1: 0 or 1 would make the update divide by zero.
+    p_init: float = Field(default=0.2, ge=0.001, le=0.999)  # P(L0): known before the course
+    p_transit: float = Field(default=0.15, ge=0.0, le=0.999)  # learns it after an attempt
+    p_slip: float = Field(default=0.1, ge=0.001, le=0.5)  # knows it, still fails
+    p_guess: float = Field(default=0.2, ge=0.001, le=0.5)  # does not know it, still passes
     threshold: float = Field(default=0.95, ge=0.5, le=1.0)
 
 
