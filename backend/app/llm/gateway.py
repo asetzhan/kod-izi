@@ -11,7 +11,7 @@ from app.models import LlmUsage
 
 # Purposes started by a student count against the student's daily quota. Grading is
 # started by the system and is not limited per student.
-STUDENT_PURPOSES = {"assistant", "questions"}
+STUDENT_PURPOSES = {"assistant", "questions", "hint"}
 
 
 class QuotaExceededError(Exception):

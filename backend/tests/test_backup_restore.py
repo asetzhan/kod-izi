@@ -140,5 +140,5 @@ def test_sec14_encrypted_backup_restores_completely(
     assert done.returncode == 0, done.stderr
     before, after = _counts(source), _counts(target)
     assert after == before
-    assert before["tasks"] == 9 and before["rls_tables"] >= 12 and before["app_grants"] > 0
+    assert before["tasks"] == 17 and before["rls_tables"] >= 12 and before["app_grants"] > 0
     assert (restored_files / "book.bin").read_bytes() == b"%PDF-1.4 sample"

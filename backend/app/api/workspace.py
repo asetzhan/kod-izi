@@ -37,6 +37,7 @@ from app.models.course import CourseGroup
 from app.services import audit
 from app.services.access import can_edit_course, is_staff
 from app.services.audit import AuditAction
+from app.services.contests import is_contest
 from app.services.grading import run_request, run_tests
 from app.services.questions import generate_questions, template_questions
 from app.services.sessions import SessionError, latest_code, open_session, writable_session
@@ -321,7 +322,8 @@ def run_public_tests(
 class SubmitIn(BaseModel):
     code: Code = Field(min_length=1)
     language: Language = "cpp17"
-    explanation: str = Field(min_length=1, max_length=20_000)
+    # Required in control works (ФТ-27); optional in olympiad practice and contests.
+    explanation: str = Field(default="", max_length=20_000)
     ui_language: str = Field(default="kk", pattern="^(kk|ru)$")
 
 
@@ -400,6 +402,10 @@ def submit(
     """Submission with explanation (ФТ-27); grading runs in the background (ФТ-31)."""
     session = _writable(db, user, session_id)
     task = _task(db, session.task_id)
+    assessment = db.get(Assessment, session.assessment_id) if session.assessment_id else None
+    olympiad = assessment is None or is_contest(assessment)
+    if not olympiad and not body.explanation.strip():
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail="explanation_required")
     in_flight = db.scalar(
         select(Submission.id).where(
             Submission.user_id == user.id,
@@ -425,6 +431,18 @@ def submit(
     )
     db.add(submission)
     db.flush()
+    record_server_event(
+        db,
+        session,
+        TraceKind.SUBMIT,
+        {"submission_id": submission.id, "code": body.code, "language": body.language},
+    )
+    if olympiad:
+        # No questions about the code here: no LLM call during a contest (ОТ-02).
+        db.commit()
+        enqueue(submission.id)
+        db.refresh(submission)
+        return SubmissionOut.build(submission)
     provider = get_provider()
     try:
         questions, source = generate_questions(
@@ -445,12 +463,6 @@ def submit(
             question_source=source,
             prompt_version="own-code-questions-v1",
         )
-    )
-    record_server_event(
-        db,
-        session,
-        TraceKind.SUBMIT,
-        {"submission_id": submission.id, "code": body.code, "language": body.language},
     )
     record_server_event(
         db,

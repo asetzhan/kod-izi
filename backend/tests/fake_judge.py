@@ -9,6 +9,8 @@ import re
 from app.judge.client import JudgeUnavailableError, RunRequest, RunResult, RunStatus
 
 MARKER = re.compile(r"//\s*fake:(\w+)")
+# `// fake:DIFF:3`: echoes the input, but answers wrong when the input contains "3".
+DIFF = re.compile(r"//\s*fake:DIFF:(\S+)")
 
 
 class FakeJudge:
@@ -35,6 +37,15 @@ class FakeJudge:
             return RunResult(RunStatus.RUNTIME_ERROR, stderr="Segmentation fault", time_s=0.01)
         if mode == "WA":
             return RunResult(RunStatus.FINISHED, stdout="wrong\n", time_s=0.01, memory_kb=900)
+        if mode == "GEN":  # a test generator: prints a test made from the seed
+            return RunResult(
+                RunStatus.FINISHED, stdout=f"case {request.stdin.strip()}\n", time_s=0.01
+            )
+        if mode == "DIFF":
+            token = DIFF.search(request.source)
+            wrong = token is not None and token.group(1) in request.stdin
+            out = "wrong\n" if wrong else request.stdin
+            return RunResult(RunStatus.FINISHED, stdout=out, time_s=0.01, memory_kb=900)
         if mode == "ECHO":
             return RunResult(RunStatus.FINISHED, stdout=request.stdin, time_s=0.01, memory_kb=900)
         return RunResult(

@@ -10,10 +10,12 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.enums import TaskStatus, TraceKind
+from app.core.enums import ParticipationKind, TaskStatus, TraceKind
 from app.core.roles import Role
 from app.models import Assessment, AssessmentTask, Task, TraceEvent, User, WorkSession
 from app.services.access import can_edit_course, is_staff, studies_course
+from app.services.contests import active_window, is_contest, join_official
+from app.services.olympiad import can_practice
 from app.services.trace import record_server_event
 
 
@@ -26,8 +28,9 @@ class SessionError(Exception):
 
 def _check_access(db: Session, user: User, task: Task, assessment: Assessment | None) -> None:
     if assessment is None:
-        # Practice outside an assessment: only for staff checking their tasks for now.
-        if not is_staff(user):
+        # Practice outside an assessment: staff checking their tasks, and students on
+        # olympiad problems once part 2 is open for them (ОТ-01).
+        if not can_practice(db, user, task):
             raise SessionError(403, "forbidden")
         return
     if user.has_role(Role.STUDENT) and not is_staff(user):
@@ -39,6 +42,20 @@ def _check_access(db: Session, user: User, task: Task, assessment: Assessment | 
         ):
             raise SessionError(403, "forbidden")
         now = datetime.now(UTC)
+        if is_contest(assessment):
+            # ОТ-02, ОТ-03: the official round or the student's own virtual round.
+            window = active_window(db, user.id, assessment, now)
+            if window is None:
+                raise SessionError(
+                    *(
+                        (403, "forbidden")
+                        if now < assessment.starts_at
+                        else (409, "assessment_closed")
+                    )
+                )
+            if window.kind == ParticipationKind.OFFICIAL:
+                join_official(db, user, assessment, now)
+            return
         if now < assessment.starts_at:
             raise SessionError(403, "forbidden")
         if now > assessment.ends_at:
@@ -96,7 +113,11 @@ def writable_session(db: Session, user: User, session_id: object) -> WorkSession
         raise SessionError(409, "session_closed")
     if session.assessment_id is not None:
         assessment = db.get(Assessment, session.assessment_id)
-        if assessment is not None and datetime.now(UTC) > assessment.ends_at:
+        now = datetime.now(UTC)
+        if is_contest(assessment) and not is_staff(user):
+            if assessment is not None and active_window(db, user.id, assessment, now) is None:
+                raise SessionError(409, "assessment_closed")
+        elif assessment is not None and now > assessment.ends_at:
             raise SessionError(409, "assessment_closed")
     return session
 

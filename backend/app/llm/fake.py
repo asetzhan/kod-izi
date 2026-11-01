@@ -87,6 +87,8 @@ class FakeLLMProvider:
         digest = hashlib.sha256(canonical.encode()).hexdigest()
         if request.prompt_version.startswith("assessment-"):
             text = json.dumps(fake_grade(request.data_blocks), ensure_ascii=False)
+        elif request.prompt_version.startswith("olympiad-hint-"):
+            text = "Жауап бойынша екілік іздеуді қарастырыңыз: тексеру функциясы монотонды."
         elif request.prompt_version.startswith("assistant-"):
             text = "Кітаптың тиісті бөлімін қараңыз және шекаралық жағдайларды тексеріңіз."
         elif request.response_schema is not None:

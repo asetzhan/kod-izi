@@ -50,7 +50,7 @@ def test_ft08_seed_is_idempotent(db: Session, seeded: SeedReport) -> None:
     lessons_before = db.scalar(select(ExternalLesson.id).order_by(ExternalLesson.id.desc()))
     again = seed_all(db, get_settings().seed_dir)
     db.flush()
-    assert again.tasks_created == 0 and again.tasks_skipped == 9
+    assert again.tasks_created == 0 and again.tasks_skipped == 17  # 9 part 1 + 8 olympiad
     assert db.query(Course).count() == 3
     assert db.query(KnowledgeComponent).count() == seeded.knowledge_components
     assert lessons_before is not None

@@ -46,6 +46,7 @@ def set_tests(task: Task, tests: list[ImportedTest]) -> None:
             input=t.input,
             expected_output=t.expected_output,
             is_hidden=t.is_hidden,
+            subtask=t.subtask,
         )
         for i, t in enumerate(tests, start=1)
     ]
@@ -110,6 +111,10 @@ def create_from_draft(
         reference_language=draft.reference_language,
         source_url=draft.source_url,
         source_note=draft.source_note,
+        tags=draft.tags,
+        cf_rating=draft.cf_rating,
+        editorial_md=draft.editorial_md,
+        subtask_points=draft.subtask_points,
         status=TaskStatus.DRAFT.value,
         author_id=author_id,
     )

@@ -31,6 +31,23 @@ class GenAiMode(StrEnum):
     OPEN = "open"
 
 
+class AssessmentKind(StrEnum):
+    CONTROL = "control"  # a control work of part 1 (ФТ-02)
+    CONTEST = "contest"  # an olympiad contest (ОТ-02)
+
+
+class ContestFormat(StrEnum):
+    """ОТ-02: ICPC (penalty time) or IOI (points for subtasks)."""
+
+    ICPC = "icpc"
+    IOI = "ioi"
+
+
+class ParticipationKind(StrEnum):
+    OFFICIAL = "official"
+    VIRTUAL = "virtual"  # ОТ-03: a past contest rewritten under the same conditions
+
+
 class CoursePart(StrEnum):
     PART1 = "part1"  # C++ basics (spec 3)
     PART2 = "part2"  # olympiad preparation (spec 4)
