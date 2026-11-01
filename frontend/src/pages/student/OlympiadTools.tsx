@@ -158,7 +158,7 @@ export function StressPanel({ sessionId, code, disabled }: { sessionId: string; 
           <input
             type="number"
             min={1}
-            max={30}
+            max={20}
             value={iterations}
             onChange={(e) => setIterations(Number(e.target.value))}
           />

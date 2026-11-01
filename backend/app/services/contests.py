@@ -98,6 +98,11 @@ def start_virtual(db: Session, user: User, contest: Assessment, now: datetime) -
         raise ContestError(409, "contest_not_finished")
     if participation(db, user.id, contest, ParticipationKind.VIRTUAL) is not None:
         raise ContestError(409, "virtual_already_used")
+    if participation(db, user.id, contest, ParticipationKind.OFFICIAL) is not None:
+        # The official participant already knows the problems and the results.
+        raise ContestError(409, "already_participated")
+    if writing_any_contest(db, user.id, now):
+        raise ContestError(409, "in_contest")
     db.add(
         ContestParticipation(
             assessment_id=contest.id,
@@ -112,6 +117,24 @@ def start_virtual(db: Session, user: User, contest: Assessment, now: datetime) -
     except IntegrityError:
         raise ContestError(409, "virtual_already_used") from None
     return Window(ParticipationKind.VIRTUAL, now, now + duration(contest))
+
+
+def in_unfinished_contest(db: Session, task_id: int, now: datetime) -> bool:
+    """The problem belongs to a contest that has not ended: students must not see it in
+    practice before or during the round (statement, editorial, hints, penalty-free tries)."""
+    return (
+        db.scalar(
+            select(Assessment.id)
+            .join(AssessmentTask, AssessmentTask.assessment_id == Assessment.id)
+            .where(
+                Assessment.kind == AssessmentKind.CONTEST.value,
+                AssessmentTask.task_id == task_id,
+                Assessment.ends_at > now,
+            )
+            .limit(1)
+        )
+        is not None
+    )
 
 
 def in_running_contest(db: Session, user_id: int, task_id: int, now: datetime) -> bool:
@@ -129,13 +152,15 @@ def in_running_contest(db: Session, user_id: int, task_id: int, now: datetime) -
 
 
 def writing_any_contest(db: Session, user_id: int, now: datetime) -> bool:
-    """True while the user is inside any official or virtual round."""
-    official = db.scalars(
+    """True while the user is inside any official or virtual round (ОТ-02: no AI at all,
+    for any problem, during the round)."""
+    joined = db.scalars(
         select(Assessment)
         .join(ContestParticipation, ContestParticipation.assessment_id == Assessment.id)
         .where(ContestParticipation.user_id == user_id)
+        .distinct()
     )
-    return any(active_window(db, user_id, c, now) is not None for c in official)
+    return any(active_window(db, user_id, c, now) is not None for c in joined)
 
 
 # Standings -------------------------------------------------------------------------------

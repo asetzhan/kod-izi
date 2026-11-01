@@ -17,7 +17,7 @@ from app.core.enums import AssessmentKind, ContestFormat, GenAiMode, Participati
 from app.db.context import set_system
 from app.models import Assessment, AssessmentTask, CourseGroup, GroupMember, Task, User
 from app.services import audit, contests
-from app.services.access import can_edit_course, can_view_course, is_staff, studies_course
+from app.services.access import can_edit_course, is_staff, studies_course
 from app.services.audit import AuditAction
 
 router = APIRouter(prefix="/api", tags=["contests"])
@@ -204,7 +204,12 @@ def list_contests(
         )
         query = query.where(Assessment.course_id.in_(mine))
     return [
-        ContestOut.build(c, now, staff, None if staff else _virtual(db, user, c))
+        ContestOut.build(
+            c,
+            now,
+            staff and can_edit_course(db, user, c.course_id),
+            None if staff else _virtual(db, user, c),
+        )
         for c in db.scalars(query)
     ]
 
@@ -219,13 +224,16 @@ def get_contest(contest_id: int, user: CurrentUser, db: DbSession) -> ContestDet
     """Problems are shown from the start: during a round and afterwards for upsolving."""
     contest = _contest(db, contest_id)
     now = datetime.now(UTC)
-    staff = is_staff(user) and can_view_course(db, user, contest.course_id)
+    staff = is_staff(user)
     if not staff:
         if not studies_course(db, user.id, contest.course_id):
             raise _forbidden()
         if now < contest.starts_at:
             raise HTTPException(status.HTTP_403_FORBIDDEN, detail="contest_not_started")
     tasks = [t for link in contest.task_links if (t := db.get(Task, link.task_id))]
+    if not can_edit_course(db, user, contest.course_id):
+        tasks = [t for t in tasks if t.status == TaskStatus.APPROVED.value]
+    staff = can_edit_course(db, user, contest.course_id)
     base = ContestOut.build(contest, now, staff, None if staff else _virtual(db, user, contest))
     return ContestDetail(
         **base.model_dump(),
@@ -260,9 +268,12 @@ def start_virtual(
 def get_standings(contest_id: int, user: CurrentUser, db: DbSession) -> dict[str, Any]:
     contest = _contest(db, contest_id)
     now = datetime.now(UTC)
-    staff = is_staff(user) and can_view_course(db, user, contest.course_id)
-    if not staff and (
-        not studies_course(db, user.id, contest.course_id) or now < contest.starts_at
+    # Names and the unfrozen table only for those who run the course's contests.
+    staff = can_edit_course(db, user, contest.course_id)
+    if (
+        not staff
+        and not is_staff(user)
+        and (not studies_course(db, user.id, contest.course_id) or now < contest.starts_at)
     ):
         raise _forbidden()
     # Access is checked above; the standings read other participants' rows, which

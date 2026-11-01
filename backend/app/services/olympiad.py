@@ -27,7 +27,8 @@ from app.models import (
     User,
     WorkSession,
 )
-from app.services.access import is_staff
+from app.services.access import can_edit_course, is_staff
+from app.services.contests import in_running_contest, in_unfinished_contest
 from app.services.results import mastery
 
 OLYMPIAD_KEY = "olympiad"
@@ -95,10 +96,14 @@ def unlock_state(db: Session, user: User) -> dict[str, Any]:
     return {"unlocked": not missing, "required": settings.unlock_topics, "missing": missing}
 
 
-def can_practice(db: Session, user: User, task: Task) -> bool:
-    """A student practises approved problems of an unlocked part 2 course they study."""
+def can_practice(db: Session, user: User, task: Task, now: datetime | None = None) -> bool:
+    """A student practises approved problems of an unlocked part 2 course they study,
+    except problems of a contest that has not ended yet (ОТ-02) and while the student
+    writes their own virtual round of it. Staff: approved problems, or drafts of the
+    courses they edit."""
+    now = now or datetime.now(UTC)
     if is_staff(user):
-        return True
+        return task.status == TaskStatus.APPROVED.value or can_edit_course(db, user, task.course_id)
     course = db.get(Course, task.course_id)
     return (
         course is not None
@@ -106,6 +111,8 @@ def can_practice(db: Session, user: User, task: Task) -> bool:
         and task.status == TaskStatus.APPROVED.value
         and course in part2_courses(db, user)
         and bool(unlock_state(db, user)["unlocked"])
+        and not in_unfinished_contest(db, task.id, now)
+        and not in_running_contest(db, user.id, task.id, now)
     )
 
 
@@ -143,15 +150,23 @@ def rating(db: Session, user_id: int, settings: OlympiadSettings) -> int:
 
 
 def bank(db: Session, user: User) -> list[Task]:
-    """Approved problems of the part 2 courses the user may open."""
+    """Approved problems of the part 2 courses the user may open; for students without
+    the problems of contests that have not ended (ОТ-02)."""
     course_ids = [c.id for c in part2_courses(db, user)]
-    return list(
-        db.scalars(
-            select(Task)
-            .where(Task.course_id.in_(course_ids), Task.status == TaskStatus.APPROVED.value)
-            .order_by(Task.cf_rating.nulls_last(), Task.id)
-        )
+    tasks = db.scalars(
+        select(Task)
+        .where(Task.course_id.in_(course_ids), Task.status == TaskStatus.APPROVED.value)
+        .order_by(Task.cf_rating.nulls_last(), Task.id)
     )
+    if is_staff(user):
+        return list(tasks)
+    now = datetime.now(UTC)
+    return [
+        t
+        for t in tasks
+        if not in_unfinished_contest(db, t.id, now)
+        and not in_running_contest(db, user.id, t.id, now)
+    ]
 
 
 def recommend(db: Session, user: User, limit: int = 10) -> dict[str, Any]:
@@ -183,7 +198,9 @@ def recommend(db: Session, user: User, limit: int = 10) -> dict[str, Any]:
 def first_opened(db: Session, user_id: int, task_id: int) -> datetime | None:
     started: datetime | None = db.scalar(
         select(func.min(WorkSession.started_at)).where(
-            WorkSession.user_id == user_id, WorkSession.task_id == task_id
+            WorkSession.user_id == user_id,
+            WorkSession.task_id == task_id,
+            WorkSession.assessment_id.is_(None),  # practice only, never contest time
         )
     )
     return started

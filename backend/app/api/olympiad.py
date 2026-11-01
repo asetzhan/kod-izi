@@ -33,13 +33,22 @@ from app.services import audit, olympiad, own_tests
 from app.services.access import is_staff, studies_course
 from app.services.assistant import olympiad_hint
 from app.services.audit import AuditAction
-from app.services.contests import in_running_contest
+from app.services.contests import in_running_contest, writing_any_contest
 from app.services.trace import record_server_event
 
 router = APIRouter(prefix="/api", tags=["olympiad"])
 
 CoachOrAdmin = Annotated[User, Depends(require_roles(Role.COACH, Role.ADMIN))]
 MAX_TEST_CHARS = 64 * 1024
+TRACE_HELPER_CHARS = 8000
+RUN_LOCK_SECONDS = 120
+
+
+def _one_run_at_a_time(redis: RedisClient, user: User) -> None:
+    """One own-tests or stress run per student at a time: these hold an API worker while
+    Judge0 runs many programs (spec 14.1, shared resources). The lock expires by itself."""
+    if not redis.set(f"olympiad_run:{user.id}", "1", nx=True, ex=RUN_LOCK_SECONDS):
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, detail="run_in_progress")
 
 
 def _forbidden(code: str = "forbidden") -> HTTPException:
@@ -226,6 +235,8 @@ def get_problem(task_id: int, user: CurrentUser, db: DbSession) -> ProblemOut:
     task = _practice_task(db, user, task_id)
     now = datetime.now(UTC)
     editorial = olympiad.editorial_state(db, user, task, now)
+    writing = writing_any_contest(db, user.id, now)  # ОТ-02: no tutorials during a round
+    show_editorial = editorial.available and not writing
     level, at = olympiad.next_hint(db, user, task, now)
     return ProblemOut(
         task=StudentTaskOut.build(task),
@@ -233,9 +244,9 @@ def get_problem(task_id: int, user: CurrentUser, db: DbSession) -> ProblemOut:
         cf_rating=task.cf_rating,
         solved=task.id in olympiad.solved_task_ids(db, user.id),
         minutes_spent=editorial.minutes_spent,
-        editorial_available=editorial.available,
+        editorial_available=show_editorial,
         editorial_opens_at=editorial.opens_at,
-        editorial_md=task.editorial_md if editorial.available else None,
+        editorial_md=task.editorial_md if show_editorial else None,
         hints=[
             HintOut(
                 level=m.hint_level or 0, answer=m.answer, blocked=m.blocked, created_at=m.created_at
@@ -244,7 +255,7 @@ def get_problem(task_id: int, user: CurrentUser, db: DbSession) -> ProblemOut:
         ],
         next_hint_level=level,
         next_hint_at=at,
-        in_contest=in_running_contest(db, user.id, task.id, now),
+        in_contest=writing or in_running_contest(db, user.id, task.id, now),
     )
 
 
@@ -262,8 +273,8 @@ def ask_hint(task_id: int, body: HintIn, user: CurrentUser, db: DbSession) -> Hi
     if session.task_id != task.id or session.assessment_id is not None:
         raise _forbidden()
     now = datetime.now(UTC)
-    if in_running_contest(db, user.id, task.id, now):
-        raise _forbidden("assistant_forbidden")
+    if in_running_contest(db, user.id, task.id, now) or writing_any_contest(db, user.id, now):
+        raise _forbidden("assistant_forbidden")  # ОТ-02: no AI during any round
     level, opens_at = olympiad.next_hint(db, user, task, now)
     if level is None:
         raise HTTPException(status.HTTP_409_CONFLICT, detail="no_more_hints")
@@ -389,13 +400,18 @@ def run_own_tests(
     session = _writable(db, user, session_id)
     task = _usable_task(db, user, session.task_id)
     tests = _tests(db, user.id, task.id)
+    if not tests:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="no_tests")
     _limit_judge(redis, user, len(tests))
+    _one_run_at_a_time(redis, user)
     try:
         results = own_tests.run_own(judge, task, body.code, body.language, tests)
     except JudgeUnavailableError:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE, detail="judge_unavailable"
         ) from None
+    finally:
+        redis.delete(f"olympiad_run:{user.id}")
     record_server_event(
         db,
         session,
@@ -451,6 +467,7 @@ def stress_test(
     session = _writable(db, user, session_id)
     task = _usable_task(db, user, session.task_id)
     _limit_judge(redis, user, 3 * body.iterations)
+    _one_run_at_a_time(redis, user)
     try:
         result = own_tests.stress(
             judge,
@@ -465,6 +482,8 @@ def stress_test(
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE, detail="judge_unavailable"
         ) from None
+    finally:
+        redis.delete(f"olympiad_run:{user.id}")
     record_server_event(
         db,
         session,
@@ -472,8 +491,9 @@ def stress_test(
         {
             "stress": True,
             "code": body.code,
-            "brute_code": body.brute_code,
-            "generator_code": body.generator_code,
+            # The trace only grows: the helper programs are kept shortened.
+            "brute_code": body.brute_code[:TRACE_HELPER_CHARS],
+            "generator_code": body.generator_code[:TRACE_HELPER_CHARS],
             "status": result.status,
             "iterations": result.iterations,
             "input": result.input[:4096],

@@ -171,7 +171,7 @@ def parse_native(files: dict[str, bytes]) -> TaskDraftData:
             source_url=_http_url(config.get("source_url")),
             source_note=str(config.get("source_note", "")),
             tags=_tags(config.get("tags", [])),
-            cf_rating=int(config["cf_rating"]) if config.get("cf_rating") is not None else None,
+            cf_rating=_int(config["cf_rating"]) if config.get("cf_rating") is not None else None,
             editorial_md=_text(files, "editorial.md").strip() if "editorial.md" in files else "",
             subtask_points=_subtask_points(config.get("subtask_points", {})),
         )
@@ -212,6 +212,13 @@ def _features(raw: object) -> dict[str, int] | None:
     return scores
 
 
+def _int(value: object) -> int:
+    try:
+        return int(str(value))
+    except (TypeError, ValueError):
+        raise TaskImportError("bad_config", f"{value!r} is not a whole number") from None
+
+
 def _subtask(value: object) -> int:
     if not isinstance(value, int) or not 1 <= value <= 50:
         raise TaskImportError("bad_config", "a subtask must be a number from 1 to 50")
@@ -230,7 +237,7 @@ def _tags(raw: object) -> list[str]:
 def _subtask_points(raw: object) -> dict[str, int]:
     if not isinstance(raw, dict):
         raise TaskImportError("bad_config", "subtask_points must map subtasks to points")
-    points = {str(k): int(v) for k, v in raw.items()}
+    points = {str(k): _int(v) for k, v in raw.items()}
     if points and (
         sum(points.values()) != 100
         or any(not k.isdigit() or not 1 <= int(k) <= 50 for k in points)

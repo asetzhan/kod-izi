@@ -81,6 +81,12 @@ def upgrade() -> None:
         "kind <> 'contest' OR (contest_format IS NOT NULL AND genai_mode = 'forbidden')",
     )
 
+    op.create_check_constraint(
+        op.f("ck_assessments_contest_minutes_valid"),
+        "assessments",
+        "freeze_minutes >= 0 AND penalty_minutes >= 0",
+    )
+
     op.create_table(
         "contest_participations",
         sa.Column("id", sa.BigInteger(), sa.Identity(always=False), nullable=False),
@@ -180,6 +186,7 @@ def downgrade() -> None:
     op.drop_table("topic_resources")
     op.drop_table("student_tests")
     op.drop_table("contest_participations")
+    op.drop_constraint(op.f("ck_assessments_contest_minutes_valid"), "assessments", type_="check")
     op.drop_constraint(op.f("ck_assessments_contest_valid"), "assessments", type_="check")
     op.drop_constraint(op.f("ck_assessments_contest_format_valid"), "assessments", type_="check")
     op.drop_constraint(op.f("ck_assessments_kind_valid"), "assessments", type_="check")

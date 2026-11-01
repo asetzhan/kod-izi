@@ -14,7 +14,7 @@ from app.core.enums import CoursePart, GenAiMode, TraceKind
 from app.llm import gateway
 from app.llm.base import LLMProvider, LLMRequest
 from app.models import AiMessage, Assessment, Course, Task, WorkSession
-from app.services.contests import in_running_contest
+from app.services.contests import writing_any_contest
 from app.services.materials import find_fragments, fragments_block
 from app.services.trace import record_server_event
 
@@ -159,13 +159,13 @@ def ask(
     if assessment is not None:
         mode = GenAiMode(assessment.genai_mode)
     elif _is_part2(db, task):
-        mode = GenAiMode.HINTS_ONLY  # ОТ-05: olympiad practice gets no ready code
+        # ОТ-05: olympiad practice gets only the step-by-step hints (olympiad_hint), so
+        # the order direction → idea → pseudocode cannot be skipped through free questions.
+        raise AssistantForbiddenError()
     else:
         mode = GenAiMode.OPEN
-    if mode == GenAiMode.FORBIDDEN or in_running_contest(
-        db, session.user_id, task.id, datetime.now(UTC)
-    ):
-        raise AssistantForbiddenError()  # ОТ-02: no AI while the problem is in a contest
+    if mode == GenAiMode.FORBIDDEN or writing_any_contest(db, session.user_id, datetime.now(UTC)):
+        raise AssistantForbiddenError()  # ОТ-02: no AI at all while the student writes a round
     gateway.ensure_quota(db, session.user_id)  # before any model work, embeddings included
     code = code[:CODE_LIMIT]
 

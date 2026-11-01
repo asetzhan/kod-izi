@@ -37,6 +37,9 @@ class Assessment(Base):
             "kind <> 'contest' OR (contest_format IS NOT NULL AND genai_mode = 'forbidden')",
             name="contest_valid",
         ),
+        CheckConstraint(
+            "freeze_minutes >= 0 AND penalty_minutes >= 0", name="contest_minutes_valid"
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)

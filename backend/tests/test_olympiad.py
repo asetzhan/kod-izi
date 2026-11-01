@@ -204,24 +204,50 @@ def test_ot02_contest_has_no_ai_and_cannot_change_after_start(
 def test_ot02_assistant_and_hints_are_off_during_the_contest(
     client: TestClient, oly: dict[str, Any]
 ) -> None:
-    contest = _contest(client, oly, -30, 120)
-    task_id = oly["tasks"][0]
+    contest = _contest(client, oly, -30, 120)  # problems 0 and 1
+    task_id, other = oly["tasks"][0], oly["tasks"][2]
+    other_sid = _session(client, oly["a"], other).json()["session_id"]  # practice, before
     sid = _session(client, oly["a"], task_id, contest["id"]).json()["session_id"]
     ask = client.post(
         f"/api/sessions/{sid}/assistant", headers=oly["a"], json={"question": "Қалай?"}
     )
     assert ask.status_code == 403 and ask.json()["detail"] == "assistant_forbidden"
-    # Not through a practice session on the same problem either.
-    practice = _session(client, oly["a"], task_id).json()["session_id"]
-    ask = client.post(
-        f"/api/sessions/{practice}/assistant", headers=oly["a"], json={"question": "Қалай?"}
-    )
-    assert ask.status_code == 403
+    # No penalty-free tries, statement, editorial or hints of a contest problem in practice.
+    blocked = _session(client, oly["a"], task_id)
+    assert blocked.status_code == 403
+    assert client.get(f"/api/olympiad/problems/{task_id}", headers=oly["a"]).status_code == 403
+    # No AI and no tutorials through another problem while the round is on.
     hint = client.post(
-        f"/api/olympiad/problems/{task_id}/hints", headers=oly["a"], json={"session_id": practice}
+        f"/api/olympiad/problems/{other}/hints", headers=oly["a"], json={"session_id": other_sid}
     )
     assert hint.status_code == 403 and hint.json()["detail"] == "assistant_forbidden"
-    assert client.get(f"/api/olympiad/problems/{task_id}", headers=oly["a"]).json()["in_contest"]
+    shown = client.get(f"/api/olympiad/problems/{other}", headers=oly["a"]).json()
+    assert shown["in_contest"] and shown["editorial_md"] is None
+
+
+def test_ot02_contest_problems_stay_out_of_practice_until_the_end(
+    client: TestClient, oly: dict[str, Any]
+) -> None:
+    _contest(client, oly, 60, 120)  # upcoming, problems 0 and 1
+    ids = [p["id"] for p in client.get("/api/olympiad/problems", headers=oly["a"]).json()]
+    assert oly["tasks"][0] not in ids and oly["tasks"][1] not in ids and oly["tasks"][2] in ids
+    assert _session(client, oly["a"], oly["tasks"][0]).status_code == 403
+    recommended = client.get("/api/olympiad/recommendations", headers=oly["a"]).json()
+    assert oly["tasks"][0] not in [p["id"] for p in recommended["problems"]]
+    # Staff still see them (to prepare the contest).
+    staff = client.get("/api/olympiad/problems", headers=oly["teacher"]).json()
+    assert oly["tasks"][0] in [p["id"] for p in staff]
+
+
+def test_ot02_only_course_staff_see_names_in_standings(
+    client: TestClient, oly: dict[str, Any], school: School
+) -> None:
+    contest = _contest(client, oly, -200, 120)
+    other = login(client, school["teacher_b"].email)  # not a teacher of this course
+    rows = client.get(f"/api/contests/{contest['id']}/standings", headers=other).json()["rows"]
+    assert all(r["name"] is None for r in rows)
+    shown = client.get(f"/api/contests/{contest['id']}", headers=other).json()
+    assert shown["task_ids"] == []
 
 
 def test_ot02_contest_submissions_need_no_explanation_and_get_no_ai_grade(
@@ -301,7 +327,9 @@ def test_ot02_ioi_contest_scores_subtasks(
 # Virtual contests (ОТ-03) --------------------------------------------------------------------
 
 
-def test_ot03_virtual_contest_after_the_end(client: TestClient, oly: dict[str, Any]) -> None:
+def test_ot03_virtual_contest_after_the_end(
+    client: TestClient, oly: dict[str, Any], db: Session
+) -> None:
     running = _contest(client, oly, -10, 60)
     early = client.post(f"/api/contests/{running['id']}/virtual", headers=oly["a"])
     assert early.status_code == 409 and early.json()["detail"] == "contest_not_finished"
@@ -319,6 +347,19 @@ def test_ot03_virtual_contest_after_the_end(client: TestClient, oly: dict[str, A
     assert me["virtual"] and me["solved"] == 1
     again = client.post(f"/api/contests/{past['id']}/virtual", headers=oly["a"])
     assert again.json()["detail"] == "virtual_already_used"
+    # An official participant already knows the problems: no virtual round for them.
+    live = _contest(client, oly, -10, 20, freeze_minutes=0)
+    _session(client, oly["b"], oly["tasks"][0], live["id"])
+    db.execute(
+        update(Assessment)
+        .where(Assessment.id == live["id"])
+        .values(
+            starts_at=datetime.now(UTC) - timedelta(minutes=50),
+            ends_at=datetime.now(UTC) - timedelta(minutes=30),
+        )
+    )
+    used = client.post(f"/api/contests/{live['id']}/virtual", headers=oly["b"])
+    assert used.json()["detail"] == "already_participated"
     # The AI stays off during the student's own virtual round as well.
     ask = client.post(f"/api/sessions/{sid}/assistant", headers=oly["a"], json={"question": "?"})
     assert ask.status_code == 403
@@ -431,18 +472,15 @@ def test_ot05_hint_with_ready_code_is_withheld(
     assert hint["blocked"] and "int main" not in hint["answer"]
 
 
-def test_ot05_practice_assistant_gives_hints_only(
-    client: TestClient, oly: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+def test_ot05_practice_gets_only_step_by_step_hints(
+    client: TestClient, oly: dict[str, Any]
 ) -> None:
-    monkeypatch.setattr(
-        "app.api.analysis.get_provider",
-        lambda: ScriptedProvider(["```cpp\n#include <iostream>\nint main() {}\n```"]),
-    )
+    """Free questions would skip the order direction → idea → pseudocode."""
     sid = _session(client, oly["a"], oly["tasks"][2]).json()["session_id"]
     answer = client.post(
-        f"/api/sessions/{sid}/assistant", headers=oly["a"], json={"question": "Код бер"}
-    ).json()
-    assert answer["blocked"]
+        f"/api/sessions/{sid}/assistant", headers=oly["a"], json={"question": "Псевдокод бер"}
+    )
+    assert answer.status_code == 403 and answer.json()["detail"] == "assistant_forbidden"
 
 
 # Own tests and the stress test (ОТ-06) -------------------------------------------------------
@@ -490,6 +528,21 @@ def test_ot06_stress_test_shows_the_differing_input(
         url, headers=oly["a"], json={**body, "generator_code": "// fake:CE", "code": "x"}
     ).json()
     assert broken["status"] == "generator_failed"
+    # 3 judge runs per iteration must fit the per-minute budget.
+    too_many = {**body, "code": "x", "iterations": 21}
+    assert client.post(url, headers=oly["a"], json=too_many).status_code == 422
+
+
+def test_ot06_one_run_at_a_time_and_no_empty_runs(
+    client: TestClient, oly: dict[str, Any], school: School, redis: Any
+) -> None:
+    sid = _session(client, oly["a"], oly["tasks"][2]).json()["session_id"]
+    empty = client.post(f"/api/sessions/{sid}/my-tests/run", headers=oly["a"], json={"code": "x"})
+    assert empty.status_code == 409 and empty.json()["detail"] == "no_tests"
+    redis.set(f"olympiad_run:{school['student_a'].id}", "1")  # a run is in progress
+    body = {"code": "x", "brute_code": "// fake:ECHO", "generator_code": "// fake:GEN"}
+    busy = client.post(f"/api/sessions/{sid}/stress", headers=oly["a"], json=body)
+    assert busy.status_code == 429 and busy.json()["detail"] == "run_in_progress"
 
 
 # Reference (ОТ-10), the drafted bank (Q-13), settings ----------------------------------------

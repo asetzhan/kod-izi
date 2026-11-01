@@ -12,7 +12,8 @@ from app.models import StudentTest, Task
 from app.services.grading import normalize_output, run_request, verdict_for
 
 MAX_OWN_TESTS = 50
-MAX_STRESS_ITERATIONS = 30
+# 3 judge runs per iteration must fit the per-minute judge budget (60 runs).
+MAX_STRESS_ITERATIONS = 20
 OUTPUT_SHOWN = 4000
 
 
