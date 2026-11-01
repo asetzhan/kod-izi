@@ -30,6 +30,8 @@ def upgrade() -> None:
         sa.Column("sync_status", sa.String(length=16), nullable=False),
         sa.Column("sync_error", sa.Text(), nullable=True),
         sa.Column("last_sync_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("verify_token", sa.String(length=32), nullable=False),
+        sa.Column("verified_at", sa.DateTime(timezone=True), nullable=True),
         sa.ForeignKeyConstraint(
             ["user_id"],
             ["users.id"],
@@ -38,6 +40,11 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_external_accounts")),
         sa.UniqueConstraint("user_id", "platform", name=op.f("uq_external_accounts_user_id")),
+    )
+    # A handle belongs to one student: only one verified account per handle.
+    op.execute(
+        "CREATE UNIQUE INDEX uq_external_accounts_verified_handle ON external_accounts "
+        "(platform, lower(handle)) WHERE verified_at IS NOT NULL"
     )
     op.create_index(
         op.f("ix_external_accounts_user_id"), "external_accounts", ["user_id"], unique=False

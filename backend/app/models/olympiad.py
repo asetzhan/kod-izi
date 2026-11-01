@@ -10,6 +10,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Identity,
+    Index,
     Integer,
     String,
     Text,
@@ -102,7 +103,16 @@ class ExternalAccount(Base):
     own consent (Q-18). Only the handle leaves the system."""
 
     __tablename__ = "external_accounts"
-    __table_args__ = (UniqueConstraint("user_id", "platform"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "platform"),
+        Index(
+            "uq_external_accounts_verified_handle",
+            "platform",
+            func.lower(text("handle")),
+            unique=True,
+            postgresql_where=text("verified_at IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
@@ -114,6 +124,10 @@ class ExternalAccount(Base):
     sync_status: Mapped[str] = mapped_column(String(16), default="pending")
     sync_error: Mapped[str | None] = mapped_column(Text)
     last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # The student proves the handle is theirs by putting this token in their Codeforces
+    # profile (first name, last name or organization); nothing is gathered before that.
+    verify_token: Mapped[str] = mapped_column(String(32))
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class ExternalSolve(Base):

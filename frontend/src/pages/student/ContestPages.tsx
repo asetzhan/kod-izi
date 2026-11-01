@@ -160,6 +160,7 @@ export function StandingsTable({ contestId }: { contestId: number }) {
 
 interface Review {
   analyses: { id: number; task_id: number; title: string; editorial_md: string }[];
+  took_part: boolean;
   upsolve: { task_id: number; label: string; title: string; solved_in_round: boolean; upsolved: boolean }[];
   explainable: { submission_id: number; task_id: number; explained: boolean }[];
 }
@@ -190,7 +191,11 @@ function ContestReview({ contestId }: { contestId: number }) {
         ))}
       </ul>
       <h3>{t("review.analysis")}</h3>
-      {review.data.analyses.length === 0 && <p className="muted">{t("review.noAnalysis")}</p>}
+      {!review.data.took_part ? (
+        <p className="muted">{t("review.virtualFirst")}</p>
+      ) : (
+        review.data.analyses.length === 0 && <p className="muted">{t("review.noAnalysis")}</p>
+      )}
       {review.data.analyses.map((a) => (
         <article key={a.id}>
           <h4>

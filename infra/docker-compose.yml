@@ -58,6 +58,7 @@ services:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     networks:
+      public: {}
       edge:
         ipv4_address: 172.28.0.10
     depends_on:
@@ -300,7 +301,11 @@ services:
       retries: 10
 
 networks:
+  # Only Nginx is on `public`, to publish its port. `edge` is internal: the backend and
+  # the frontend have no route to the internet (Q-09, Q-18).
+  public: {}
   edge:
+    internal: true
     ipam:
       config:
         # Fixed subnet so the backend trusts X-Forwarded-For only from Nginx.
@@ -311,8 +316,8 @@ networks:
     internal: true
   llm:
     internal: true
-  # Internet access for ClamAV signatures and Ollama models only; nothing of the
-  # application (Nginx, backend, frontend) is on this network.
+  # Internet access for ClamAV signatures, Ollama models and the Codeforces connector
+  # (Q-18) only; nothing of the web tier (Nginx, backend, frontend) is on this network.
   egress: {}
   scan:
     internal: true

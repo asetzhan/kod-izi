@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 from typing import Any, Protocol
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models import ExternalAccount, ExternalSolve, RatingPoint
@@ -83,20 +83,81 @@ def valid_handle(handle: str) -> bool:
     return bool(HANDLE.match(handle))
 
 
-def _problem_url(problem: dict[str, Any]) -> str:
-    contest = problem.get("contestId")
-    index = problem.get("index", "")
-    if contest is None:
-        return "https://codeforces.com/problemset"
-    kind = "gym" if int(contest) >= 100000 else "contest"
+INDEX = re.compile(r"^[A-Z][0-9]?$")
+
+
+def _small_int(value: object, high: int = 10**10) -> int | None:
+    """An untrusted number from the API, or None."""
+    return (
+        value
+        if isinstance(value, int) and not isinstance(value, bool) and 0 <= value < high
+        else None
+    )
+
+
+def _problem_url(contest: int, index: str) -> str:
+    kind = "gym" if contest >= 100000 else "contest"
     return f"https://codeforces.com/{kind}/{contest}/problem/{index}"
 
 
+def _owns_handle(info: dict[str, Any], token: str) -> bool:
+    """The token is in the public profile: the student controls the account."""
+    fields = (info.get("firstName"), info.get("lastName"), info.get("organization"))
+    return any(isinstance(f, str) and token in f for f in fields)
+
+
+def _solve(account: ExternalAccount, item: Any) -> ExternalSolve | None:
+    """One accepted submission from the API, checked field by field; None if unusable."""
+    if not isinstance(item, dict) or item.get("verdict") != "OK":
+        return None
+    problem = item.get("problem")
+    if not isinstance(problem, dict):
+        return None
+    contest = _small_int(problem.get("contestId"), 10**7)
+    index = problem.get("index")
+    solved = _small_int(item.get("creationTimeSeconds"))
+    if contest is None or not isinstance(index, str) or not INDEX.match(index) or solved is None:
+        return None
+    tags = problem.get("tags")
+    return ExternalSolve(
+        user_id=account.user_id,
+        platform="codeforces",
+        problem_key=f"{contest}{index}",
+        title=str(problem.get("name", ""))[:300],
+        url=_problem_url(contest, index),
+        rating=_small_int(problem.get("rating"), 5000),
+        tags=[t[:40] for t in tags if isinstance(t, str)][:20] if isinstance(tags, list) else [],
+        solved_at=datetime.fromtimestamp(solved, UTC),
+        source="api",
+    )
+
+
 def sync_codeforces(db: Session, account: ExternalAccount, api: CodeforcesApi) -> None:
-    """Rating, accepted problems and rating history. Errors are kept on the account."""
+    """Ownership first, then rating, accepted problems and rating history. Every error is
+    kept on the account; nothing is raised."""
     now = datetime.now(UTC)
+    account.last_sync_at = now
     try:
-        [info] = api.call("user.info", {"handles": account.handle})
+        infos = api.call("user.info", {"handles": account.handle})
+        info = infos[0] if isinstance(infos, list) and infos and isinstance(infos[0], dict) else {}
+        if account.verified_at is None:
+            if not _owns_handle(info, account.verify_token):
+                account.sync_status = "unverified"
+                account.sync_error = None
+                return
+            taken = db.scalar(
+                select(ExternalAccount.id).where(
+                    ExternalAccount.platform == account.platform,
+                    func.lower(ExternalAccount.handle) == account.handle.lower(),
+                    ExternalAccount.verified_at.is_not(None),
+                    ExternalAccount.id != account.id,
+                )
+            )
+            if taken is not None:
+                account.sync_status = "error"
+                account.sync_error = "handle_taken"
+                return
+            account.verified_at = now
         submissions = api.call(
             "user.status", {"handle": account.handle, "from": "1", "count": str(MAX_SUBMISSIONS)}
         )
@@ -104,11 +165,10 @@ def sync_codeforces(db: Session, account: ExternalAccount, api: CodeforcesApi) -
     except (ExternalError, ValueError, KeyError, TypeError) as exc:
         account.sync_status = "error"
         account.sync_error = str(exc)[:500]
-        account.last_sync_at = now
         return
 
-    account.rating = info.get("rating")
-    account.max_rating = info.get("maxRating")
+    account.rating = _small_int(info.get("rating"), 5000)
+    account.max_rating = _small_int(info.get("maxRating"), 5000)
     known = set(
         db.scalars(
             select(ExternalSolve.problem_key).where(
@@ -117,26 +177,10 @@ def sync_codeforces(db: Session, account: ExternalAccount, api: CodeforcesApi) -
         )
     )
     for item in submissions if isinstance(submissions, list) else []:
-        if item.get("verdict") != "OK":
-            continue
-        problem = item.get("problem") or {}
-        key = f"{problem.get('contestId', '')}{problem.get('index', '')}"[:100]
-        if not key or key in known:
-            continue
-        known.add(key)
-        db.add(
-            ExternalSolve(
-                user_id=account.user_id,
-                platform="codeforces",
-                problem_key=key,
-                title=str(problem.get("name", ""))[:300],
-                url=_problem_url(problem),
-                rating=problem.get("rating"),
-                tags=[str(t)[:40] for t in problem.get("tags", [])][:20],
-                solved_at=datetime.fromtimestamp(int(item.get("creationTimeSeconds", 0)), UTC),
-                source="api",
-            )
-        )
+        solve = _solve(account, item)
+        if solve is not None and solve.problem_key not in known:
+            known.add(solve.problem_key)
+            db.add(solve)
     seen = set(
         db.scalars(
             select(RatingPoint.at).where(
@@ -145,7 +189,13 @@ def sync_codeforces(db: Session, account: ExternalAccount, api: CodeforcesApi) -
         )
     )
     for change in history if isinstance(history, list) else []:
-        at = datetime.fromtimestamp(int(change.get("ratingUpdateTimeSeconds", 0)), UTC)
+        if not isinstance(change, dict):
+            continue
+        stamp = _small_int(change.get("ratingUpdateTimeSeconds"))
+        rating = _small_int(change.get("newRating"), 5000)
+        if stamp is None or rating is None:
+            continue
+        at = datetime.fromtimestamp(stamp, UTC)
         if at in seen:
             continue
         seen.add(at)
@@ -154,13 +204,12 @@ def sync_codeforces(db: Session, account: ExternalAccount, api: CodeforcesApi) -
                 user_id=account.user_id,
                 platform="codeforces",
                 contest=str(change.get("contestName", ""))[:300],
-                rating=int(change.get("newRating", 0)),
+                rating=rating,
                 at=at,
             )
         )
     account.sync_status = "ok"
     account.sync_error = None
-    account.last_sync_at = now
 
 
 # Manual marks ------------------------------------------------------------------------------

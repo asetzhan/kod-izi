@@ -14,7 +14,15 @@ from app.db.context import set_system
 from app.jobs import get_explain_enqueue, get_external_enqueue
 from app.llm.fake import FakeLLMProvider
 from app.main import app
-from app.models import AiGrade, Assessment, ExternalAccount, ExternalSolve, RatingPoint, Submission
+from app.models import (
+    AiGrade,
+    Assessment,
+    CourseTeacher,
+    ExternalAccount,
+    ExternalSolve,
+    RatingPoint,
+    Submission,
+)
 from app.services import ai_grading
 from app.services.component_fill import fill_submission
 from app.services.external import (
@@ -32,8 +40,12 @@ NOW = int(datetime(2026, 10, 1, tzinfo=UTC).timestamp())
 
 
 class FakeApi:
-    def __init__(self, fail: str | None = None) -> None:
+    def __init__(
+        self, fail: str | None = None, marker: str = "kodizi-abc", bad_item: bool = False
+    ) -> None:
         self.fail = fail
+        self.marker = marker
+        self.bad_item = bad_item
         self.calls: list[str] = []
 
     def call(self, method: str, params: dict[str, str]) -> Any:
@@ -41,7 +53,14 @@ class FakeApi:
         if method == self.fail:
             raise ExternalError("handle: User with handle x not found")
         if method == "user.info":
-            return [{"handle": params["handles"], "rating": 1450, "maxRating": 1510}]
+            return [
+                {
+                    "handle": params["handles"],
+                    "rating": 1450,
+                    "maxRating": 1510,
+                    "organization": f"KazNPU {self.marker}",
+                }
+            ]
         if method == "user.status":
             problem = {
                 "contestId": 1520,
@@ -58,6 +77,17 @@ class FakeApi:
                     "problem": {**problem, "index": "C"},
                     "creationTimeSeconds": NOW,
                 },
+                *(
+                    [
+                        {
+                            "verdict": "OK",
+                            "problem": {**problem, "contestId": "x1"},
+                            "creationTimeSeconds": NOW,
+                        }
+                    ]
+                    if self.bad_item
+                    else []
+                ),
             ]
         return [{"contestName": "Round 1", "newRating": 1450, "ratingUpdateTimeSeconds": NOW}]
 
@@ -71,11 +101,15 @@ def test_ot08_codeforces_sync_gathers_solves_and_rating(db: Session, school: Sch
         platform="codeforces",
         handle="tourist_fan",
         consent_at=datetime.now(UTC),
+        verify_token="kodizi-abc",
     )
     db.add(account)
     db.flush()
-    sync_codeforces(db, account, FakeApi())
+    sync_codeforces(db, account, FakeApi(marker="someone-else"))
+    assert account.sync_status == "unverified" and db.scalar(select(ExternalSolve.id)) is None
+    sync_codeforces(db, account, FakeApi(bad_item=True))  # a malformed item is skipped
     db.flush()
+    assert account.verified_at is not None
     solves = db.scalars(select(ExternalSolve)).all()
     assert [(s.problem_key, s.url, s.tags) for s in solves] == [
         ("1520B", "https://codeforces.com/contest/1520/problem/B", ["math"])
@@ -93,6 +127,7 @@ def test_ot08_api_errors_do_not_stop_the_system(db: Session, school: School) -> 
         platform="codeforces",
         handle="nobody",
         consent_at=datetime.now(UTC),
+        verify_token="kodizi-abc",
     )
     db.add(account)
     db.flush()
@@ -171,10 +206,12 @@ def test_ot08_linking_needs_consent_and_unlinking_removes_the_data(
     linked = client.post(url, headers=student, json={"handle": "tourist_fan", "consent": True})
     assert linked.status_code == 201 and len(synced) == 1
     account = db.get(ExternalAccount, synced[0])
-    assert account is not None
-    sync_codeforces(db, account, FakeApi())
+    assert account is not None and linked.json()["verify_token"] == account.verify_token
+    sync_codeforces(db, account, FakeApi(marker=account.verify_token))
     db.flush()
     assert client.post(f"{url}/sync", headers=student).json()["detail"] == "sync_too_soon"
+    again = client.post(url, headers=student, json={"handle": "other_one", "consent": True})
+    assert again.json()["detail"] == "sync_too_soon"  # re-linking does not skip the wait
 
     manual = client.post(
         "/api/my/external/solves",
@@ -182,10 +219,11 @@ def test_ot08_linking_needs_consent_and_unlinking_removes_the_data(
         json={"platform": "cses", "url": "https://cses.fi/problemset/task/1068", "title": "Weird"},
     ).json()
     assert manual["verified"] is False
-    coach = login(client, school["coach"].email)
-    assert client.post(f"/api/external-solves/{manual['id']}/verify", headers=coach).json()[
-        "verified"
-    ]
+    verify = f"/api/external-solves/{manual['id']}/verify"
+    coach = login(client, school["coach"].email)  # leads no course of this student
+    assert client.post(verify, headers=coach).status_code == 403
+    teacher = login(client, school["teacher_a"].email)  # the student's own teacher
+    assert client.post(verify, headers=teacher).json()["verified"]
     other = login(client, school["student_b"].email)
     assert (
         client.get(f"/api/users/{school['student_a'].id}/external", headers=other).status_code
@@ -226,8 +264,11 @@ def test_ot09_knowledge_map_by_topic_and_rating_over_time(
     assert data["rating"]["internal"][-1]["rating"] == 1000
     assert data["rating"]["codeforces"][0]["rating"] == 1300
     coach = login(client, school["coach"].email)
-    seen = client.get(f"/api/users/{school['student_a'].id}/knowledge-map", headers=coach)
-    assert seen.status_code == 200
+    url = f"/api/users/{school['student_a'].id}/knowledge-map"
+    assert client.get(url, headers=coach).status_code == 403  # not a coach of this course
+    db.add(CourseTeacher(course_id=oly["course"]["id"], user_id=school["coach"].id))
+    db.flush()
+    assert client.get(url, headers=coach).status_code == 200
     assert (
         client.get(
             f"/api/users/{school['student_a'].id}/knowledge-map", headers=oly["b"]
@@ -283,6 +324,9 @@ def test_ot07_ai_analysis_is_published_by_the_coach(
         ("A", True),
         ("B", False),
     ]
+    # Someone who did not write it gets no analysis: they may still write it virtually.
+    outsider = client.get(f"/api/contests/{cid}/review", headers=finished["b"]).json()
+    assert outsider["analyses"] == [] and outsider["took_part"] is False
     assert (
         client.post(f"/api/contests/{cid}/analyses", headers=finished["a"], json={}).status_code
         == 403
@@ -342,3 +386,26 @@ def test_ot07_explained_solution_gets_the_dual_assessment(
     )
     assert confirm.status_code == 201  # the teacher's half of the dual assessment
     app.dependency_overrides.pop(get_explain_enqueue, None)
+
+
+def test_ot08_a_handle_is_verified_for_one_student_only(db: Session, school: School) -> None:
+    accounts = [
+        ExternalAccount(
+            user_id=school[who].id,
+            platform="codeforces",
+            handle=handle,
+            consent_at=datetime.now(UTC),
+            verify_token=token,
+        )
+        for who, handle, token in (
+            ("student_a", "Tourist_Fan", "kodizi-aaa"),
+            ("student_b", "tourist_fan", "kodizi-bbb"),
+        )
+    ]
+    db.add_all(accounts)
+    db.flush()
+    sync_codeforces(db, accounts[0], FakeApi(marker="kodizi-aaa"))
+    db.flush()
+    sync_codeforces(db, accounts[1], FakeApi(marker="kodizi-bbb"))
+    assert accounts[0].verified_at is not None
+    assert accounts[1].verified_at is None and accounts[1].sync_error == "handle_taken"

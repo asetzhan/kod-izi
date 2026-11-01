@@ -79,6 +79,7 @@ describe("after the contest and outside the system", () => {
       }),
       "GET /api/contests/4/standings": () => ({ format: "icpc", frozen: false, virtual: false, tasks: [], rows: [] }),
       "GET /api/contests/4/review": () => ({
+        took_part: true,
         analyses: [{ id: 1, task_id: 9, title: "Станоктар", editorial_md: "Жауап бойынша екілік іздеу." }],
         upsolve: [
           { task_id: 9, label: "A", title: "Станоктар", solved_in_round: true, upsolved: false },

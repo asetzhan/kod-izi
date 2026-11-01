@@ -57,6 +57,8 @@ class AuditAction(StrEnum):
     CONTEST_ANALYSED = "contest_analysed"
     EXTERNAL_LINKED = "external_linked"
     EXTERNAL_UNLINKED = "external_unlinked"
+    CONTEST_ANALYSIS_EDITED = "contest_analysis_edited"
+    EXTERNAL_SOLVE_VERIFIED = "external_solve_verified"
     RUBRIC_EXAMPLE_ADDED = "rubric_example_added"
     RUBRIC_EXAMPLE_REMOVED = "rubric_example_removed"
 

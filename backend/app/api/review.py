@@ -1,5 +1,6 @@
 """Stage 7a: after a contest (ОТ-07), external platforms (ОТ-08), the knowledge map (ОТ-09)."""
 
+import secrets
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any, Literal
@@ -8,7 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select
 
-from app.api.deps import CurrentUser, DbSession, client_ip
+from app.api.deps import CurrentUser, DbSession, RedisClient, client_ip
+from app.core.enums import ParticipationKind
 from app.core.roles import Role
 from app.jobs import get_explain_enqueue, get_external_enqueue
 from app.llm.ollama import LLMUnavailableError
@@ -16,9 +18,12 @@ from app.llm.registry import get_provider
 from app.models import (
     Assessment,
     ContestAnalysis,
+    CourseGroup,
+    CourseTeacher,
     Explanation,
     ExternalAccount,
     ExternalSolve,
+    GroupMember,
     RatingPoint,
     Submission,
     Task,
@@ -27,7 +32,7 @@ from app.models import (
 from app.services import audit
 from app.services.access import can_edit_course, can_view_user, is_staff, studies_course
 from app.services.audit import AuditAction
-from app.services.contests import is_contest
+from app.services.contests import is_contest, participation
 from app.services.external import SYNC_COOLDOWN_S, problem_key, valid_handle
 from app.services.review import (
     explainable,
@@ -57,8 +62,19 @@ def _contest(db: DbSession, contest_id: int) -> Assessment:
 
 
 def _can_see_student(db: DbSession, viewer: User, student_id: int) -> bool:
-    """The student, their teachers, administrators and coaches (who lead the olympiad part)."""
-    return can_view_user(db, viewer, student_id) or viewer.has_role(Role.COACH)
+    """The student, their teachers, administrators, and coaches of a course the student
+    studies (a coach leads the olympiad courses, not every student of the university)."""
+    if can_view_user(db, viewer, student_id):
+        return True
+    if not viewer.has_role(Role.COACH):
+        return False
+    led = select(CourseTeacher.course_id).where(CourseTeacher.user_id == viewer.id)
+    shared = (
+        select(CourseGroup.course_id)
+        .join(GroupMember, GroupMember.group_id == CourseGroup.group_id)
+        .where(GroupMember.user_id == student_id, CourseGroup.course_id.in_(led))
+    )
+    return db.scalar(select(shared.exists())) is True
 
 
 # ОТ-07: analysis, upsolving, explanation -----------------------------------------------------
@@ -130,7 +146,7 @@ class AnalysisEdit(BaseModel):
 
 @router.put("/contest-analyses/{analysis_id}")
 def edit_analysis(
-    analysis_id: int, body: AnalysisEdit, user: CurrentUser, db: DbSession
+    analysis_id: int, body: AnalysisEdit, request: Request, user: CurrentUser, db: DbSession
 ) -> AnalysisOut:
     analysis = db.get(ContestAnalysis, analysis_id)
     contest = db.get(Assessment, analysis.assessment_id) if analysis else None
@@ -138,6 +154,15 @@ def edit_analysis(
         raise _forbidden()
     analysis.editorial_md = body.editorial_md
     analysis.published = body.published
+    audit.record(
+        db,
+        AuditAction.CONTEST_ANALYSIS_EDITED,
+        actor_id=user.id,
+        object_type="contest_analysis",
+        object_id=analysis.id,
+        ip=client_ip(request),
+        details={"published": body.published},
+    )
     db.commit()
     return _analysis_out(db, analysis)
 
@@ -152,10 +177,20 @@ def contest_review(contest_id: int, user: CurrentUser, db: DbSession) -> dict[st
         raise _forbidden()
     if not round_over(db, user, contest, now):
         raise _forbidden("contest_not_finished")
-    analyses = db.scalars(
-        select(ContestAnalysis).where(
-            ContestAnalysis.assessment_id == contest.id, ContestAnalysis.published.is_(True)
-        )
+    # Only participants read the analysis: someone who has not written the contest could
+    # read it and then start a virtual round knowing the solutions (ОТ-03).
+    took_part = any(
+        participation(db, user.id, contest, kind) is not None
+        for kind in (ParticipationKind.OFFICIAL, ParticipationKind.VIRTUAL)
+    )
+    analyses = (
+        db.scalars(
+            select(ContestAnalysis).where(
+                ContestAnalysis.assessment_id == contest.id, ContestAnalysis.published.is_(True)
+            )
+        ).all()
+        if took_part
+        else []
     )
     accepted = db.scalars(
         select(Submission)
@@ -168,6 +203,7 @@ def contest_review(contest_id: int, user: CurrentUser, db: DbSession) -> dict[st
     ).all()
     return {
         "analyses": [_analysis_out(db, a) for a in analyses],
+        "took_part": took_part,
         "upsolve": upsolve_list(db, user, contest),
         "explainable": [
             {"submission_id": s.id, "task_id": s.task_id, "explained": s.explanation is not None}
@@ -209,6 +245,8 @@ def explain(
 class AccountOut(BaseModel):
     platform: str
     handle: str
+    verified: bool
+    verify_token: str  # shown only to the student, to put in their Codeforces profile
     rating: int | None
     max_rating: int | None
     sync_status: str
@@ -232,6 +270,8 @@ def _account_out(a: ExternalAccount) -> AccountOut:
     return AccountOut(
         platform=a.platform,
         handle=a.handle,
+        verified=a.verified_at is not None,
+        verify_token=a.verify_token,
         rating=a.rating,
         max_rating=a.max_rating,
         sync_status=a.sync_status,
@@ -267,6 +307,27 @@ def _external(db: DbSession, user_id: int) -> dict[str, Any]:
     }
 
 
+def _cooldown(redis: RedisClient, user_id: int) -> None:
+    """At most one Codeforces sync per student every SYNC_COOLDOWN_S, linking included."""
+    if not redis.set(f"codeforces:cooldown:{user_id}", "1", nx=True, ex=SYNC_COOLDOWN_S):
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="sync_too_soon")
+
+
+def _forget_gathered(db: DbSession, user_id: int) -> None:
+    db.execute(
+        delete(ExternalSolve).where(
+            ExternalSolve.user_id == user_id,
+            ExternalSolve.platform == "codeforces",
+            ExternalSolve.source == "api",
+        )
+    )
+    db.execute(
+        delete(RatingPoint).where(
+            RatingPoint.user_id == user_id, RatingPoint.platform == "codeforces"
+        )
+    )
+
+
 @router.get("/my/external")
 def my_external(user: CurrentUser, db: DbSession) -> dict[str, Any]:
     return _external(db, user.id)
@@ -280,7 +341,12 @@ class LinkIn(BaseModel):
 
 @router.post("/my/external/codeforces", status_code=status.HTTP_201_CREATED)
 def link_codeforces(
-    body: LinkIn, request: Request, user: CurrentUser, db: DbSession, enqueue: SyncEnqueue
+    body: LinkIn,
+    request: Request,
+    user: CurrentUser,
+    db: DbSession,
+    redis: RedisClient,
+    enqueue: SyncEnqueue,
 ) -> AccountOut:
     if not body.consent:
         raise HTTPException(
@@ -293,11 +359,25 @@ def link_codeforces(
             ExternalAccount.user_id == user.id, ExternalAccount.platform == "codeforces"
         )
     )
+    _cooldown(redis, user.id)
+    now = datetime.now(UTC)
     if account is None:
-        account = ExternalAccount(user_id=user.id, platform="codeforces")
+        account = ExternalAccount(
+            user_id=user.id,
+            platform="codeforces",
+            handle=body.handle,
+            consent_at=now,
+            verify_token=f"kodizi-{secrets.token_hex(6)}",
+        )
         db.add(account)
+    elif account.handle != body.handle:
+        # Another handle: nothing gathered for the old one stays, ownership is proven again.
+        _forget_gathered(db, user.id)
+        account.verify_token = f"kodizi-{secrets.token_hex(6)}"
+        account.verified_at = None
+        account.rating = account.max_rating = None
     account.handle = body.handle
-    account.consent_at = datetime.now(UTC)
+    account.consent_at = now
     account.sync_status = "pending"
     account.sync_error = None
     db.flush()
@@ -317,7 +397,9 @@ def link_codeforces(
 
 
 @router.post("/my/external/codeforces/sync", status_code=status.HTTP_202_ACCEPTED)
-def sync_codeforces_now(user: CurrentUser, db: DbSession, enqueue: SyncEnqueue) -> AccountOut:
+def sync_codeforces_now(
+    user: CurrentUser, db: DbSession, redis: RedisClient, enqueue: SyncEnqueue
+) -> AccountOut:
     account = db.scalar(
         select(ExternalAccount).where(
             ExternalAccount.user_id == user.id, ExternalAccount.platform == "codeforces"
@@ -329,6 +411,7 @@ def sync_codeforces_now(user: CurrentUser, db: DbSession, enqueue: SyncEnqueue) 
         seconds=SYNC_COOLDOWN_S
     ):
         raise HTTPException(status.HTTP_409_CONFLICT, detail="sync_too_soon")
+    _cooldown(redis, user.id)
     account.sync_status = "pending"
     db.commit()
     enqueue(account.id)
@@ -345,18 +428,7 @@ def unlink_codeforces(request: Request, user: CurrentUser, db: DbSession) -> Non
     )
     if account is None:
         return
-    db.execute(
-        delete(ExternalSolve).where(
-            ExternalSolve.user_id == user.id,
-            ExternalSolve.platform == "codeforces",
-            ExternalSolve.source == "api",
-        )
-    )
-    db.execute(
-        delete(RatingPoint).where(
-            RatingPoint.user_id == user.id, RatingPoint.platform == "codeforces"
-        )
-    )
+    _forget_gathered(db, user.id)
     audit.record(
         db,
         AuditAction.EXTERNAL_UNLINKED,
@@ -422,11 +494,19 @@ def student_external(student_id: int, user: CurrentUser, db: DbSession) -> dict[
 
 
 @router.post("/external-solves/{solve_id}/verify")
-def verify_solve(solve_id: int, user: CurrentUser, db: DbSession) -> SolveOut:
+def verify_solve(solve_id: int, request: Request, user: CurrentUser, db: DbSession) -> SolveOut:
     solve = db.get(ExternalSolve, solve_id)
     if solve is None or not is_staff(user) or not _can_see_student(db, user, solve.user_id):
         raise _forbidden()
     solve.verified_by = user.id
+    audit.record(
+        db,
+        AuditAction.EXTERNAL_SOLVE_VERIFIED,
+        actor_id=user.id,
+        object_type="external_solve",
+        object_id=solve.id,
+        ip=client_ip(request),
+    )
     db.commit()
     return _solve_out(solve)
 

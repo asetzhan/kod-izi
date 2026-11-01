@@ -17,6 +17,8 @@ interface External {
   accounts: {
     platform: string;
     handle: string;
+    verified: boolean;
+    verify_token: string;
     rating: number | null;
     max_rating: number | null;
     sync_status: string;
@@ -152,9 +154,15 @@ function ExternalAccounts({ onChange }: { onChange: () => void }) {
             Codeforces: <strong>{account.handle}</strong>
             {account.rating !== null && ` · ${t("external.rating", { rating: account.rating, max: account.max_rating })}`}
           </p>
+          {!account.verified && (
+            <p role="status">
+              {t("external.verifyHelp")} <code>{account.verify_token}</code>
+            </p>
+          )}
           <p className="muted">
             {t(`external.status.${account.sync_status}`)}
-            {account.sync_error && `: ${account.sync_error}`}
+            {account.sync_error &&
+              `: ${account.sync_error === "handle_taken" ? t("external.handleTaken") : account.sync_error}`}
           </p>
           <div className="row">
             <button type="button" onClick={() => void act(() => apiSend("POST", "/api/my/external/codeforces/sync"))}>
