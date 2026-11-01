@@ -111,7 +111,12 @@ def writable_session(db: Session, user: User, session_id: object) -> WorkSession
         raise SessionError(403, "forbidden")
     if session.closed_at is not None:
         raise SessionError(409, "session_closed")
-    if session.assessment_id is not None:
+    if session.assessment_id is None:
+        # Practice: the problem may have joined a contest since the session was opened.
+        task = db.get(Task, session.task_id)
+        if task is None or not can_practice(db, user, task):
+            raise SessionError(403, "forbidden")
+    else:
         assessment = db.get(Assessment, session.assessment_id)
         now = datetime.now(UTC)
         if is_contest(assessment) and not is_staff(user):

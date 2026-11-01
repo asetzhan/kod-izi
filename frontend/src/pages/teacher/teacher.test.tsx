@@ -72,6 +72,7 @@ const TASK: Task = {
   knowledge_component_ids: [5],
   tags: [],
   cf_rating: null,
+  in_bank: true,
   editorial_md: "",
   subtask_points: {},
 };

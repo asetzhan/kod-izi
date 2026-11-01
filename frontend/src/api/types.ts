@@ -87,6 +87,7 @@ export interface Task extends TaskSummary {
   level_rationale: string;
   tags: string[];
   cf_rating: number | null;
+  in_bank: boolean;
   editorial_md: string;
   subtask_points: Record<string, number>;
   tests: TestCase[];

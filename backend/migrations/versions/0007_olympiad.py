@@ -30,6 +30,9 @@ def upgrade() -> None:
         ),
     )
     op.add_column("tasks", sa.Column("cf_rating", sa.Integer(), nullable=True))
+    op.add_column(
+        "tasks", sa.Column("in_bank", sa.Boolean(), server_default=sa.true(), nullable=False)
+    )
     op.add_column("tasks", sa.Column("editorial_md", sa.Text(), server_default="", nullable=False))
     op.add_column(
         "tasks",
@@ -200,5 +203,6 @@ def downgrade() -> None:
     op.drop_constraint(op.f("ck_tasks_memory_limit_range"), "tasks", type_="check")
     op.drop_column("tasks", "subtask_points")
     op.drop_column("tasks", "editorial_md")
+    op.drop_column("tasks", "in_bank")
     op.drop_column("tasks", "cf_rating")
     op.drop_column("tasks", "tags")

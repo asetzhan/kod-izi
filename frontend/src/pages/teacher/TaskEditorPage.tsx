@@ -35,6 +35,7 @@ const EMPTY_TASK = {
   // Olympiad bank (ОТ-01, ОТ-02, ОТ-05).
   tags: [] as string[],
   cf_rating: null as number | null,
+  in_bank: true,
   editorial_md: "",
   subtask_points: {} as Record<string, number>,
 };
@@ -63,6 +64,7 @@ function toForm(task: Task): TaskForm {
     knowledge_component_ids: task.knowledge_component_ids,
     tags: task.tags ?? [],
     cf_rating: task.cf_rating ?? null,
+    in_bank: task.in_bank ?? true,
     editorial_md: task.editorial_md ?? "",
     subtask_points: task.subtask_points ?? {},
   };
@@ -267,6 +269,10 @@ function TaskEditor({
               />
             </label>
           </div>
+          <label className="checkbox">
+            <input type="checkbox" checked={form.in_bank} onChange={(e) => set("in_bank", e.target.checked)} />
+            {t("task.inBank")}
+          </label>
           <label>
             {t("olympiad.editorial")}
             <textarea rows={4} value={form.editorial_md} onChange={(e) => set("editorial_md", e.target.value)} />

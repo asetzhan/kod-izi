@@ -69,6 +69,7 @@ class TaskDraftData:
     # Olympiad bank (ОТ-01, ОТ-02, ОТ-05).
     tags: list[str] = field(default_factory=list)
     cf_rating: int | None = None
+    in_bank: bool = True
     editorial_md: str = ""
     subtask_points: dict[str, int] = field(default_factory=dict)
 
@@ -172,6 +173,7 @@ def parse_native(files: dict[str, bytes]) -> TaskDraftData:
             source_note=str(config.get("source_note", "")),
             tags=_tags(config.get("tags", [])),
             cf_rating=_int(config["cf_rating"]) if config.get("cf_rating") is not None else None,
+            in_bank=bool(config.get("in_bank", True)),
             editorial_md=_text(files, "editorial.md").strip() if "editorial.md" in files else "",
             subtask_points=_subtask_points(config.get("subtask_points", {})),
         )

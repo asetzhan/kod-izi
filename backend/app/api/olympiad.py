@@ -3,12 +3,14 @@
 test (ОТ-06). Contests are in api/contests.py.
 """
 
+import secrets
 import uuid
 from datetime import UTC, datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
+from redis.exceptions import WatchError
 from sqlalchemy import func, select
 
 from app.api.content_schemas import StudentTaskOut
@@ -41,14 +43,33 @@ router = APIRouter(prefix="/api", tags=["olympiad"])
 CoachOrAdmin = Annotated[User, Depends(require_roles(Role.COACH, Role.ADMIN))]
 MAX_TEST_CHARS = 64 * 1024
 TRACE_HELPER_CHARS = 8000
-RUN_LOCK_SECONDS = 120
+# Longer than the longest run: 20 iterations × 3 programs × wall time limit.
+RUN_LOCK_SECONDS = 1500
 
 
-def _one_run_at_a_time(redis: RedisClient, user: User) -> None:
+def _one_run_at_a_time(redis: RedisClient, user: User) -> str:
     """One own-tests or stress run per student at a time: these hold an API worker while
-    Judge0 runs many programs (spec 14.1, shared resources). The lock expires by itself."""
-    if not redis.set(f"olympiad_run:{user.id}", "1", nx=True, ex=RUN_LOCK_SECONDS):
+    Judge0 runs many programs (spec 14.1, shared resources). Returns the lock's token."""
+    token = secrets.token_hex(16)
+    if not redis.set(f"olympiad_run:{user.id}", token, nx=True, ex=RUN_LOCK_SECONDS):
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, detail="run_in_progress")
+    return token
+
+
+def _release(redis: RedisClient, user: User, token: str) -> None:
+    """Delete the lock only if it is still ours (it may have expired and been retaken)."""
+    key = f"olympiad_run:{user.id}"
+    with redis.pipeline() as pipe:
+        try:
+            pipe.watch(key)  # type: ignore[no-untyped-call]
+            if pipe.get(key) in (token, token.encode()):
+                pipe.multi()
+                pipe.delete(key)
+                pipe.execute()
+            else:
+                pipe.unwatch()
+        except WatchError:
+            pass  # changed meanwhile: not ours any more
 
 
 def _forbidden(code: str = "forbidden") -> HTTPException:
@@ -403,7 +424,7 @@ def run_own_tests(
     if not tests:
         raise HTTPException(status.HTTP_409_CONFLICT, detail="no_tests")
     _limit_judge(redis, user, len(tests))
-    _one_run_at_a_time(redis, user)
+    token = _one_run_at_a_time(redis, user)
     try:
         results = own_tests.run_own(judge, task, body.code, body.language, tests)
     except JudgeUnavailableError:
@@ -411,7 +432,7 @@ def run_own_tests(
             status.HTTP_503_SERVICE_UNAVAILABLE, detail="judge_unavailable"
         ) from None
     finally:
-        redis.delete(f"olympiad_run:{user.id}")
+        _release(redis, user, token)
     record_server_event(
         db,
         session,
@@ -467,7 +488,7 @@ def stress_test(
     session = _writable(db, user, session_id)
     task = _usable_task(db, user, session.task_id)
     _limit_judge(redis, user, 3 * body.iterations)
-    _one_run_at_a_time(redis, user)
+    token = _one_run_at_a_time(redis, user)
     try:
         result = own_tests.stress(
             judge,
@@ -483,7 +504,7 @@ def stress_test(
             status.HTTP_503_SERVICE_UNAVAILABLE, detail="judge_unavailable"
         ) from None
     finally:
-        redis.delete(f"olympiad_run:{user.id}")
+        _release(redis, user, token)
     record_server_event(
         db,
         session,

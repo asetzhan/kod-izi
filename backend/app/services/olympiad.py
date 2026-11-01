@@ -109,6 +109,7 @@ def can_practice(db: Session, user: User, task: Task, now: datetime | None = Non
         course is not None
         and course.part == CoursePart.PART2.value
         and task.status == TaskStatus.APPROVED.value
+        and task.in_bank
         and course in part2_courses(db, user)
         and bool(unlock_state(db, user)["unlocked"])
         and not in_unfinished_contest(db, task.id, now)
@@ -164,7 +165,8 @@ def bank(db: Session, user: User) -> list[Task]:
     return [
         t
         for t in tasks
-        if not in_unfinished_contest(db, t.id, now)
+        if t.in_bank
+        and not in_unfinished_contest(db, t.id, now)
         and not in_running_contest(db, user.id, t.id, now)
     ]
 

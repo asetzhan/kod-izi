@@ -17,6 +17,8 @@ from app.models import (
     Assessment,
     AssessmentTask,
     ContestParticipation,
+    CourseGroup,
+    GroupMember,
     Submission,
     Task,
     User,
@@ -154,6 +156,25 @@ def in_running_contest(db: Session, user_id: int, task_id: int, now: datetime) -
 def writing_any_contest(db: Session, user_id: int, now: datetime) -> bool:
     """True while the user is inside any official or virtual round (ОТ-02: no AI at all,
     for any problem, during the round)."""
+    my_courses = (
+        select(CourseGroup.course_id)
+        .join(GroupMember, GroupMember.group_id == CourseGroup.group_id)
+        .where(GroupMember.user_id == user_id)
+    )
+    # An official round of the student's course counts even before they open a problem:
+    # its statements are readable from the start, so the AI must be off already.
+    running = db.scalar(
+        select(Assessment.id)
+        .where(
+            Assessment.kind == AssessmentKind.CONTEST.value,
+            Assessment.course_id.in_(my_courses),
+            Assessment.starts_at <= now,
+            Assessment.ends_at >= now,
+        )
+        .limit(1)
+    )
+    if running is not None:
+        return True
     joined = db.scalars(
         select(Assessment)
         .join(ContestParticipation, ContestParticipation.assessment_id == Assessment.id)

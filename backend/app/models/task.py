@@ -16,6 +16,7 @@ from sqlalchemy import (
     false,
     func,
     text,
+    true,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -74,6 +75,8 @@ class Task(Base):
     # Olympiad bank (ОТ-01): topic tags and Codeforces difficulty rating.
     tags: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default=text("'[]'::jsonb"))
     cf_rating: Mapped[int | None] = mapped_column(Integer)
+    # ОТ-01: off for problems kept for a contest; students then never see them in the bank.
+    in_bank: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
     # ОТ-05: the tutorial, shown after the student spent an hour on the problem.
     editorial_md: Mapped[str] = mapped_column(Text, default="", server_default="")
     # ОТ-02, IOI: points per subtask ("1": 30, "2": 70); empty means per test.

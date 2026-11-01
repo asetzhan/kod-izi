@@ -333,6 +333,14 @@ def test_ot03_virtual_contest_after_the_end(
     running = _contest(client, oly, -10, 60)
     early = client.post(f"/api/contests/{running['id']}/virtual", headers=oly["a"])
     assert early.status_code == 409 and early.json()["detail"] == "contest_not_finished"
+    db.execute(  # end it, so no round of the course is running any more
+        update(Assessment)
+        .where(Assessment.id == running["id"])
+        .values(
+            starts_at=datetime.now(UTC) - timedelta(minutes=300),
+            ends_at=datetime.now(UTC) - timedelta(minutes=240),
+        )
+    )
 
     past = _contest(client, oly, -200, 120)
     b = _session(client, oly["b"], oly["tasks"][0], past["id"])
@@ -590,3 +598,53 @@ def test_ot04_settings_are_changed_by_coach_or_admin(
     )
     assert bad.status_code == 422
     assert db.scalar(select(AuditLog).where(AuditLog.action == "olympiad_settings_changed"))
+
+
+def test_ot02_ai_is_off_for_course_students_before_they_open_a_contest_problem(
+    client: TestClient, oly: dict[str, Any]
+) -> None:
+    other = oly["tasks"][2]
+    sid = _session(client, oly["a"], other).json()["session_id"]
+    _contest(client, oly, -10, 120)  # running, the student has not opened it
+    hint = client.post(
+        f"/api/olympiad/problems/{other}/hints", headers=oly["a"], json={"session_id": sid}
+    )
+    assert hint.status_code == 403 and hint.json()["detail"] == "assistant_forbidden"
+
+
+def test_ot02_old_practice_session_closes_when_the_problem_joins_a_contest(
+    client: TestClient, oly: dict[str, Any]
+) -> None:
+    task_id = oly["tasks"][0]
+    sid = _session(client, oly["a"], task_id).json()["session_id"]  # practice, before
+    _contest(client, oly, 30, 120)  # the problem is now kept for a contest
+    for path, body in (("test", {"code": SOLUTION}), ("submit", {"code": SOLUTION})):
+        response = client.post(f"/api/sessions/{sid}/{path}", headers=oly["a"], json=body)
+        assert response.status_code == 403, path
+
+
+def test_ot01_problems_kept_for_a_contest_stay_out_of_the_bank(
+    client: TestClient, oly: dict[str, Any]
+) -> None:
+    hidden = _problem(client, oly["teacher"], oly["course"]["id"], title="Kept", in_bank=False)
+    ids = [p["id"] for p in client.get("/api/olympiad/problems", headers=oly["a"]).json()]
+    assert hidden not in ids
+    assert _session(client, oly["a"], hidden).status_code == 403
+    staff = [p["id"] for p in client.get("/api/olympiad/problems", headers=oly["teacher"]).json()]
+    assert hidden in staff
+    task = client.get(f"/api/tasks/{hidden}", headers=oly["teacher"]).json()
+    assert task["in_bank"] is False
+
+
+def test_ot06_a_run_lock_is_released_only_by_its_owner(redis: Any, school: School) -> None:
+    from app.api.olympiad import _one_run_at_a_time, _release
+
+    user = school["student_a"]
+    token = _one_run_at_a_time(redis, user)
+    redis.set(f"olympiad_run:{user.id}", "someone-else")  # expired and taken again
+    _release(redis, user, token)
+    assert redis.get(f"olympiad_run:{user.id}") in (b"someone-else", "someone-else")
+    redis.delete(f"olympiad_run:{user.id}")
+    mine = _one_run_at_a_time(redis, user)
+    _release(redis, user, mine)
+    assert redis.get(f"olympiad_run:{user.id}") is None

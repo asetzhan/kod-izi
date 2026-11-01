@@ -120,6 +120,7 @@ def _fill(db: DbSession, task: Task, body: TaskIn) -> None:
         "source_note",
         "teacher_requirements",
         "cf_rating",
+        "in_bank",
         "editorial_md",
     ):
         setattr(task, name, getattr(body, name))

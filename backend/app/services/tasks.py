@@ -113,6 +113,7 @@ def create_from_draft(
         source_note=draft.source_note,
         tags=draft.tags,
         cf_rating=draft.cf_rating,
+        in_bank=draft.in_bank,
         editorial_md=draft.editorial_md,
         subtask_points=draft.subtask_points,
         status=TaskStatus.DRAFT.value,

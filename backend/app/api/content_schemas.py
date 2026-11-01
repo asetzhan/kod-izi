@@ -160,6 +160,7 @@ class TaskIn(BaseModel):
     # Olympiad bank (ОТ-01, ОТ-02, ОТ-05).
     tags: list[Tag] = Field(default_factory=list, max_length=20)
     cf_rating: int | None = Field(default=None, ge=800, le=3500)
+    in_bank: bool = True  # off: kept for a contest, hidden from the practice bank
     editorial_md: str = Field(default="", max_length=100_000)
     subtask_points: dict[Annotated[str, Field(pattern=r"^[1-9][0-9]?$")], int] = Field(
         default_factory=dict, max_length=50
@@ -222,6 +223,7 @@ class TaskOut(TaskSummary):
     level_rationale: str
     tags: list[str]
     cf_rating: int | None
+    in_bank: bool
     editorial_md: str
     subtask_points: dict[str, int]
     tests: list[TestCaseOut]
@@ -248,6 +250,7 @@ class TaskOut(TaskSummary):
                         "teacher_requirements",
                         "tags",
                         "cf_rating",
+                        "in_bank",
                         "editorial_md",
                         "subtask_points",
                     )
