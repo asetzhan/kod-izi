@@ -28,7 +28,12 @@ from app.models.course import (
     Topic,
 )
 from app.models.group import Group, GroupMember, GroupTeacher
-from app.models.olympiad import ContestParticipation, StudentTest, TopicResource
+from app.models.olympiad import (
+    ContestParticipation,
+    SimilarityReport,
+    StudentTest,
+    TopicResource,
+)
 from app.models.panel import (
     ComponentEntry,
     ComponentEntryVersion,
@@ -72,6 +77,7 @@ __all__ = [
     "Rubric",
     "RubricCriterion",
     "RubricExample",
+    "SimilarityReport",
     "StudentTest",
     "Submission",
     "SubmissionTestResult",

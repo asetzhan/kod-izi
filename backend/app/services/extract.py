@@ -2,15 +2,21 @@
 
 Runs in the separate `extractor` worker, which has no internet and no access to the
 application's web tier (spec 14.1: text is extracted in an isolated processor).
-OCR of scanned books is stage 6b (ФТ-37).
+Scanned PDF pages, which have no text layer, are recognised with Tesseract in Kazakh and
+Russian (ФТ-37).
 """
 
 import io
 import posixpath
 import re
+import shutil
+import subprocess  # nosec B404
+import tempfile
 import zipfile
+from collections.abc import Callable
 from dataclasses import dataclass
 from html.parser import HTMLParser
+from pathlib import Path
 
 from defusedxml import ElementTree
 
@@ -19,6 +25,14 @@ MAX_UNPACKED = 100 * 1024 * 1024  # DOCX, PPTX, EPUB after unpacking
 MAX_MEMBER = 20 * 1024 * 1024  # one EPUB chapter
 CHUNK_CHARS = 1200
 CHUNK_OVERLAP = 150
+# A PDF page with less text than this is treated as a scan (ФТ-37).
+MIN_PAGE_TEXT = 20
+OCR_LANGUAGES = "kaz+rus"
+OCR_DPI = 300
+OCR_TIMEOUT_S = 120
+
+# pdf bytes, 1-based page numbers → recognised text per page
+Ocr = Callable[[bytes, list[int]], dict[int, str]]
 
 
 class ExtractError(ValueError):
@@ -85,7 +99,51 @@ def detect_type(filename: str, data: bytes) -> str:
 # Extraction ----------------------------------------------------------------------------
 
 
-def extract_pdf(data: bytes) -> list[Page]:
+def tesseract_ocr(data: bytes, numbers: list[int]) -> dict[int, str]:
+    """Render each page with poppler and recognise it with Tesseract (kaz+rus). Missing
+    tools or a failed page give no text for that page instead of failing the book."""
+    out: dict[int, str] = {}
+    pdftoppm, tesseract = shutil.which("pdftoppm"), shutil.which("tesseract")
+    if pdftoppm is None or tesseract is None:
+        return out
+    with tempfile.TemporaryDirectory() as tmp:
+        pdf = Path(tmp) / "book.pdf"
+        pdf.write_bytes(data)
+        for number in numbers:
+            image = Path(tmp) / f"page{number}"
+            try:
+                subprocess.run(  # noqa: S603  # nosec B603
+                    [
+                        pdftoppm,
+                        "-f",
+                        str(number),
+                        "-l",
+                        str(number),
+                        "-r",
+                        str(OCR_DPI),
+                        "-gray",
+                        "-png",
+                        "-singlefile",
+                        str(pdf),
+                        str(image),
+                    ],
+                    check=True,
+                    capture_output=True,
+                    timeout=OCR_TIMEOUT_S,
+                )
+                result = subprocess.run(  # noqa: S603  # nosec B603
+                    [tesseract, f"{image}.png", "stdout", "-l", OCR_LANGUAGES],
+                    check=True,
+                    capture_output=True,
+                    timeout=OCR_TIMEOUT_S,
+                )
+            except (OSError, subprocess.SubprocessError):
+                continue
+            out[number] = result.stdout.decode("utf-8", errors="replace")
+    return out
+
+
+def extract_pdf(data: bytes, ocr: Ocr | None = None, max_ocr_pages: int = 500) -> list[Page]:
     from pypdf import PdfReader
     from pypdf.errors import PdfReadError
 
@@ -99,6 +157,12 @@ def extract_pdf(data: bytes) -> list[Page]:
         for number, page in enumerate(reader.pages, start=1):
             chapter = chapters.get(number, chapter)
             pages.append(Page(chapter, number, page.extract_text() or ""))
+        scanned = [p.page for p in pages if p.page and len(p.text.strip()) < MIN_PAGE_TEXT]
+        if ocr is not None and scanned:
+            texts = ocr(data, scanned[:max_ocr_pages])
+            pages = [
+                Page(p.chapter, p.page, texts[p.page]) if p.page in texts else p for p in pages
+            ]
         return pages
     except PdfReadError as exc:
         raise ExtractError(f"bad_pdf: {exc}") from None
@@ -221,8 +285,10 @@ EXTRACTORS = {
 }
 
 
-def extract(mime: str, data: bytes) -> list[Page]:
+def extract(mime: str, data: bytes, ocr: Ocr | None = None) -> list[Page]:
     try:
+        if mime == "application/pdf":
+            return extract_pdf(data, ocr)
         return EXTRACTORS[mime](data)
     except ExtractError:
         raise

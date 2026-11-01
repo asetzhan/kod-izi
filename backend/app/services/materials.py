@@ -21,7 +21,7 @@ from app.models import (
     Task,
 )
 from app.services.antivirus import ScanError, Scanner
-from app.services.extract import ExtractError, detect_type, extract, split
+from app.services.extract import ExtractError, detect_type, extract, split, tesseract_ocr
 
 EMBED_BATCH = 32
 
@@ -69,7 +69,7 @@ def process_version(
         storage_path(version.stored_name).unlink(missing_ok=True)
         return
     try:
-        pages = extract(version.mime, data)
+        pages = extract(version.mime, data, tesseract_ocr if get_settings().ocr_enabled else None)
     except ExtractError as exc:
         version.status = MaterialStatus.FAILED.value
         version.error = str(exc)[:500]

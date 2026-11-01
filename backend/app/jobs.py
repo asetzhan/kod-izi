@@ -16,10 +16,11 @@ from app.db.session import get_sessionmaker
 from app.judge import get_judge
 from app.judge.judge0 import MAX_WALL_TIME_S
 from app.llm.registry import get_provider
-from app.models import MaterialVersion, Submission
+from app.models import MaterialVersion, SimilarityReport, Submission
 from app.services.antivirus import ClamdScanner
 from app.services.materials import process_version
 from app.services.pipeline import run_pipeline
+from app.services.similarity import run_report
 
 
 def grade_job(submission_id: int) -> None:
@@ -112,3 +113,28 @@ def get_enqueue() -> Callable[[int], None]:
             raise RuntimeError("inline grading is for load tests, not production")
         return grade_in_thread
     return enqueue_grading
+
+
+def similarity_job(report_id: int) -> None:
+    """ФТ-30: JPlag on an assessment's submissions. Runs in the isolated `analyzer` worker."""
+    with get_sessionmaker()() as db:
+        set_system(db)
+        report = db.get(SimilarityReport, report_id)
+        if report is None or report.status != "pending":
+            return
+        run_report(db, report)
+        db.commit()
+
+
+@lru_cache
+def _analysis_queue() -> Queue:
+    return Queue("analysis", connection=Redis.from_url(get_settings().redis_url))
+
+
+def enqueue_similarity(report_id: int) -> None:
+    _analysis_queue().enqueue(similarity_job, report_id, job_timeout=900)
+
+
+def get_similarity_enqueue() -> Callable[[int], None]:
+    """FastAPI dependency; tests replace it with inline processing."""
+    return enqueue_similarity
