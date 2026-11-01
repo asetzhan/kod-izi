@@ -69,6 +69,7 @@ export interface TestCase {
   input: string;
   expected_output: string;
   is_hidden: boolean;
+  subtask?: number;
 }
 
 export interface Task extends TaskSummary {
@@ -84,6 +85,10 @@ export interface Task extends TaskSummary {
   teacher_requirements: string;
   features: Record<FeatureCode, number | null>;
   level_rationale: string;
+  tags: string[];
+  cf_rating: number | null;
+  editorial_md: string;
+  subtask_points: Record<string, number>;
   tests: TestCase[];
   knowledge_component_ids: number[];
 }

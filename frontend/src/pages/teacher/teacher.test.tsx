@@ -70,6 +70,10 @@ const TASK: Task = {
   level_rationale: "",
   tests: [{ id: 1, position: 1, input: "4\n", expected_output: "EVEN\n", is_hidden: false }],
   knowledge_component_ids: [5],
+  tags: [],
+  cf_rating: null,
+  editorial_md: "",
+  subtask_points: {},
 };
 
 beforeEach(async () => {

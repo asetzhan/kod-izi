@@ -32,6 +32,11 @@ const EMPTY_TASK = {
   teacher_requirements: "",
   tests: [] as TestCase[],
   knowledge_component_ids: [] as number[],
+  // Olympiad bank (ОТ-01, ОТ-02, ОТ-05).
+  tags: [] as string[],
+  cf_rating: null as number | null,
+  editorial_md: "",
+  subtask_points: {} as Record<string, number>,
 };
 type TaskForm = typeof EMPTY_TASK;
 
@@ -49,13 +54,29 @@ function toForm(task: Task): TaskForm {
     source_url: task.source_url,
     source_note: task.source_note,
     teacher_requirements: task.teacher_requirements,
-    tests: task.tests.map(({ input, expected_output, is_hidden }) => ({
+    tests: task.tests.map(({ input, expected_output, is_hidden, subtask }) => ({
       input,
       expected_output,
       is_hidden,
+      subtask: subtask ?? 1,
     })),
     knowledge_component_ids: task.knowledge_component_ids,
+    tags: task.tags ?? [],
+    cf_rating: task.cf_rating ?? null,
+    editorial_md: task.editorial_md ?? "",
+    subtask_points: task.subtask_points ?? {},
   };
+}
+
+/** "1:30, 2:70" → {"1": 30, "2": 70} (IOI subtask points, ОТ-02). */
+function parsePoints(text: string): Record<string, number> {
+  return Object.fromEntries(
+    text
+      .split(",")
+      .map((part) => part.split(":").map((s) => s.trim()))
+      .filter(([k, v]) => k && v && !Number.isNaN(Number(v)))
+      .map(([k, v]) => [k, Number(v)]),
+  );
 }
 
 /** Task editor: content, tests, knowledge components (ФТ-10, ФТ-18), level (ФТ-19). */
@@ -89,6 +110,11 @@ function TaskEditor({
   const [form, setForm] = useState<TaskForm>(task ? toForm(task) : EMPTY_TASK);
   const [error, setError] = useState<unknown>(null);
   const [saved, setSaved] = useState(false);
+  const [pointsText, setPointsText] = useState(() =>
+    Object.entries(form.subtask_points)
+      .map(([k, v]) => `${k}:${v}`)
+      .join(", "),
+  );
 
   const set = <K extends keyof TaskForm>(key: K, value: TaskForm[K]) => {
     setSaved(false);
@@ -202,6 +228,50 @@ function TaskEditor({
             />
           </label>
 
+          <h2>{t("task.olympiad")}</h2>
+          <div className="row">
+            <label>
+              {t("olympiad.tags")}
+              <input
+                value={form.tags.join(", ")}
+                onChange={(e) =>
+                  set(
+                    "tags",
+                    e.target.value
+                      .split(",")
+                      .map((s) => s.trim())
+                      .filter(Boolean),
+                  )
+                }
+              />
+            </label>
+            <label>
+              {t("olympiad.rating")}
+              <input
+                type="number"
+                min={800}
+                max={3500}
+                value={form.cf_rating ?? ""}
+                onChange={(e) => set("cf_rating", e.target.value ? Number(e.target.value) : null)}
+              />
+            </label>
+            <label>
+              {t("task.subtaskPoints")}
+              <input
+                placeholder="1:30, 2:70"
+                value={pointsText}
+                onChange={(e) => {
+                  setPointsText(e.target.value);
+                  set("subtask_points", parsePoints(e.target.value));
+                }}
+              />
+            </label>
+          </div>
+          <label>
+            {t("olympiad.editorial")}
+            <textarea rows={4} value={form.editorial_md} onChange={(e) => set("editorial_md", e.target.value)} />
+          </label>
+
           <h2>{t("task.tests")}</h2>
           {form.tests.map((test, i) => (
             <div key={i} className="test-row">
@@ -222,6 +292,16 @@ function TaskEditor({
                 <input type="checkbox" checked={test.is_hidden} onChange={(e) => setTest(i, { is_hidden: e.target.checked })} />
                 {t("task.hidden")}
               </label>
+              <label>
+                {t("task.subtask")}
+                <input
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={test.subtask ?? 1}
+                  onChange={(e) => setTest(i, { subtask: Number(e.target.value) })}
+                />
+              </label>
               <button type="button" onClick={() => set("tests", form.tests.filter((_, j) => j !== i))}>
                 {t("common.remove")}
               </button>
@@ -229,7 +309,7 @@ function TaskEditor({
           ))}
           <button
             type="button"
-            onClick={() => set("tests", [...form.tests, { input: "", expected_output: "", is_hidden: true }])}
+            onClick={() => set("tests", [...form.tests, { input: "", expected_output: "", is_hidden: true, subtask: 1 }])}
           >
             {t("task.addTest")}
           </button>

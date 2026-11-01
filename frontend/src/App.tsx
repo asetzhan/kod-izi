@@ -8,15 +8,19 @@ import { homeFor, ROLE_HOME, useAuth } from "./auth/AuthContext";
 import { RequireRole } from "./auth/RequireRole";
 import { Layout } from "./components/Layout";
 import { CabinetPage } from "./pages/CabinetPage";
+import { CoachHomePage } from "./pages/coach/CoachHomePage";
 import { ChooseRolePage } from "./pages/ChooseRolePage";
 import { ConsentPage } from "./pages/ConsentPage";
 import { LoginPage } from "./pages/LoginPage";
 import { SecurityPage } from "./pages/SecurityPage";
 import { AssessmentPage } from "./pages/student/AssessmentPage";
+import { ContestPage, ContestsPage } from "./pages/student/ContestPages";
+import { OlympiadPage } from "./pages/student/OlympiadPage";
 import { ResultsPage } from "./pages/student/ResultsPage";
 import { StudentHomePage } from "./pages/student/StudentHomePage";
 import { WorkspacePage } from "./pages/student/WorkspacePage";
 import { ActivityPage } from "./pages/teacher/ActivityPage";
+import { ContestAdminPage } from "./pages/teacher/ContestAdminPage";
 import { MasteryPage } from "./pages/teacher/MasteryPage";
 import { MaterialsPage } from "./pages/teacher/MaterialsPage";
 import { ModelPanelPage } from "./pages/teacher/ModelPanelPage";
@@ -30,6 +34,7 @@ import { TaskEditorPage } from "./pages/teacher/TaskEditorPage";
 const HOME_PAGES: Partial<Record<Role, ReactNode>> = {
   student: <StudentHomePage />,
   teacher: <CoursesPage />,
+  coach: <CoachHomePage />,
 };
 
 function RootRedirect() {
@@ -103,6 +108,25 @@ export function App() {
           element={<RequireRole role="student"><WorkspacePage /></RequireRole>}
         />
         <Route path="/teacher/tasks/:taskId" element={<RequireRole role="teacher"><TaskEditorPage /></RequireRole>} />
+        <Route path="/student/olympiad" element={<RequireRole role="student"><OlympiadPage /></RequireRole>} />
+        <Route
+          path="/student/olympiad/problems/:taskId"
+          element={<RequireRole role="student"><WorkspacePage key="practice" olympiad /></RequireRole>}
+        />
+        <Route path="/student/contests" element={<RequireRole role="student"><ContestsPage /></RequireRole>} />
+        <Route path="/student/contests/:contestId" element={<RequireRole role="student"><ContestPage /></RequireRole>} />
+        <Route
+          path="/student/contests/:assessmentId/tasks/:taskId"
+          element={<RequireRole role="student"><WorkspacePage key="contest" olympiad /></RequireRole>}
+        />
+        <Route
+          path="/teacher/courses/:courseId/contests"
+          element={<RequireRole role="teacher"><ContestAdminPage /></RequireRole>}
+        />
+        <Route
+          path="/coach/courses/:courseId/contests"
+          element={<RequireRole role="coach"><ContestAdminPage /></RequireRole>}
+        />
         <Route path="*" element={<RootRedirect />} />
       </Route>
     </Routes>

@@ -38,6 +38,7 @@ export function CoursePage() {
             <Link to={`/teacher/courses/${courseId}/materials`}>{t("materials.title")}</Link>
             <Link to={`/teacher/courses/${courseId}/model`}>{t("panel.title")}</Link>
             <Link to={`/teacher/courses/${courseId}/mastery`}>{t("masteryPage.title")}</Link>
+            <Link to={`/teacher/courses/${courseId}/contests`}>{t("contest.list")}</Link>
           </p>
         )}
         <TopicList topics={course.data.topics} />

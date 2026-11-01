@@ -12,6 +12,7 @@ import type {
 import { CodeEditor } from "../../components/CodeEditor";
 import { ErrorText, Status } from "../../components/Status";
 import { AssistantPanel } from "./AssistantPanel";
+import { OwnTestsPanel, ProblemExtras, StressPanel } from "./OlympiadTools";
 import { useAuth } from "../../auth/AuthContext";
 import { flushLeftovers, sendEvents, TraceRecorder } from "../../workspace/TraceRecorder";
 
@@ -19,8 +20,12 @@ const SNAPSHOT_DELAY_MS = 2000;
 const POLL_MS = 1500;
 const POLL_LIMIT = 200; // about five minutes
 
-/** Task workspace (ФТ-24): editor, run, tests, submission with explanation (ФТ-27). */
-export function WorkspacePage() {
+/** Task workspace (ФТ-24): editor, run, tests, submission with explanation (ФТ-27).
+ *
+ * `olympiad`: practice on a bank problem or a contest problem (spec 4, 10): own tests and
+ * the stress test (ОТ-06), no explanation, the tutorial and hints instead of the assistant
+ * in practice (ОТ-05), no AI at all in a contest (ОТ-02). */
+export function WorkspacePage({ olympiad = false }: { olympiad?: boolean }) {
   const { assessmentId, taskId } = useParams();
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
@@ -38,7 +43,7 @@ export function WorkspacePage() {
     opened.current = true;
     apiSend<WorkSession>("POST", "/api/sessions", {
       task_id: Number(taskId),
-      assessment_id: Number(assessmentId),
+      assessment_id: assessmentId ? Number(assessmentId) : null,
     }).then(
       (opened) => {
         const rec = new TraceRecorder(userId, opened.session_id, sendEvents, () => setClosed(true));
@@ -137,9 +142,25 @@ export function WorkspacePage() {
           disabled={closed}
           language={i18n.language === "ru" ? "ru" : "kk"}
           beforeAction={() => snapshotNow(code)}
+          withExplanation={!olympiad}
         />
       </section>
-      <AssistantPanel sessionId={session.session_id} mode={session.genai_mode} code={code} disabled={closed} />
+      {olympiad ? (
+        <>
+          <OwnTestsPanel taskId={session.task.id} sessionId={session.session_id} code={code} disabled={closed} />
+          <StressPanel sessionId={session.session_id} code={code} disabled={closed} />
+          {session.assessment_id === null && (
+            <ProblemExtras
+              taskId={session.task.id}
+              sessionId={session.session_id}
+              code={code}
+              language={i18n.language === "ru" ? "ru" : "kk"}
+            />
+          )}
+        </>
+      ) : (
+        <AssistantPanel sessionId={session.session_id} mode={session.genai_mode} code={code} disabled={closed} />
+      )}
     </>
   );
 }
@@ -235,12 +256,14 @@ function SubmitPanel({
   disabled,
   language,
   beforeAction,
+  withExplanation,
 }: {
   sessionId: string;
   code: string;
   disabled: boolean;
   language: "kk" | "ru";
   beforeAction: () => void;
+  withExplanation: boolean;
 }) {
   const { t } = useTranslation();
   const [explanation, setExplanation] = useState("");
@@ -268,12 +291,12 @@ function SubmitPanel({
     try {
       const created = await apiSend<SubmissionResult>("POST", `/api/sessions/${sessionId}/submit`, {
         code,
-        explanation,
+        ...(withExplanation ? { explanation } : {}),
         ui_language: language,
       });
       polls.current = 0;
       setSubmission(created);
-      setAnswers(created.questions.map(() => ""));
+      setAnswers((created.questions ?? []).map(() => ""));
     } catch (caught) {
       setError(caught);
     }
@@ -296,16 +319,18 @@ function SubmitPanel({
     <>
       <form className="inline-form" onSubmit={submit}>
         <h2>{t("workspace.submitTitle")}</h2>
-        <label>
-          {t("workspace.explanation")}
-          <textarea
-            required
-            rows={4}
-            maxLength={20000}
-            value={explanation}
-            onChange={(e) => setExplanation(e.target.value)}
-          />
-        </label>
+        {withExplanation && (
+          <label>
+            {t("workspace.explanation")}
+            <textarea
+              required
+              rows={4}
+              maxLength={20000}
+              value={explanation}
+              onChange={(e) => setExplanation(e.target.value)}
+            />
+          </label>
+        )}
         <button type="submit" disabled={disabled || !code.trim()}>
           {t("workspace.submit")}
         </button>
@@ -324,7 +349,7 @@ function SubmitPanel({
           {submission.compile_output && <pre className="io">{submission.compile_output}</pre>}
         </div>
       )}
-      {submission && submission.questions.length > 0 && (
+      {submission && (submission.questions?.length ?? 0) > 0 && (
         <form className="inline-form" onSubmit={sendAnswers}>
           <h3>{t("workspace.questionsTitle")}</h3>
           {submission.questions.map((q, i) => (
