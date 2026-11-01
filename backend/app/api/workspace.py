@@ -45,6 +45,7 @@ from app.services import audit
 from app.services.access import can_edit_course, can_view_user, is_staff
 from app.services.analytics import label_stages
 from app.services.assignments import assignment_for
+from app.services.assistant import MODE_ORDER, strictest_running_mode
 from app.services.audit import AuditAction
 from app.services.contests import (
     active_window,
@@ -161,9 +162,16 @@ def create_session(
 def _session_mode(db: Session, user: User, task: Task, assessment: Assessment | None) -> GenAiMode:
     """What the assistant allows here; the server enforces it again on every request."""
     if assessment is not None:
-        return GenAiMode(assessment.genai_mode)
-    assignment = assignment_for(db, user.id, task.id)
-    return GenAiMode(assignment.genai_mode) if assignment else GenAiMode.OPEN
+        mode = GenAiMode(assessment.genai_mode)
+    else:
+        assignment = assignment_for(db, user.id, task.id)
+        mode = GenAiMode(assignment.genai_mode) if assignment else GenAiMode.OPEN
+    running = strictest_running_mode(
+        db, user.id, datetime.now(UTC), other_than=assessment.id if assessment else None
+    )
+    if running is not None and MODE_ORDER.index(running) < MODE_ORDER.index(mode):
+        return running
+    return mode
 
 
 class EventBatch(BaseModel):
@@ -478,8 +486,13 @@ def submit(
         db.refresh(submission)
         return SubmissionOut.build(submission)
     provider = get_provider()
-    if writing_any_contest(db, user.id, datetime.now(UTC)):
-        # ОТ-02: no LLM call at all while the student writes a round.
+    now = datetime.now(UTC)
+    if writing_any_contest(db, user.id, now) or (
+        strictest_running_mode(db, user.id, now, other_than=session.assessment_id)
+        == GenAiMode.FORBIDDEN
+    ):
+        # No LLM call while the student writes a round or another work without AI: the
+        # code could carry that work's statement to the model.
         questions, source = template_questions(body.code, body.ui_language), "template"
     else:
         try:

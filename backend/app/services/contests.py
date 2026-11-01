@@ -145,7 +145,7 @@ def in_unfinished_assessment(db: Session, task_id: int, now: datetime) -> bool:
         db.scalar(
             select(Assessment.id)
             .join(AssessmentTask, AssessmentTask.assessment_id == Assessment.id)
-            .where(AssessmentTask.task_id == task_id, Assessment.ends_at > now)
+            .where(AssessmentTask.task_id == task_id, Assessment.ends_at >= now)
             .limit(1)
         )
         is not None

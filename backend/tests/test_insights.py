@@ -17,6 +17,7 @@ from app.models import (
     AppSetting,
     Assessment,
     CourseTeacher,
+    Explanation,
     Submission,
     TraceEvent,
 )
@@ -231,6 +232,7 @@ def test_ft05_individual_task_is_worked_on_and_graded(
     stranger = {**body, "user_id": school["student_b"].id}
     assert client.post(url, headers=ws["teacher"], json=stranger).status_code == 403
 
+    _end_assessments(db, ws)  # no control work limits the assistant now
     opened = client.post(
         "/api/sessions", headers=ws["student"], json={"task_id": task_id, "assessment_id": None}
     )
@@ -428,3 +430,21 @@ def test_ft49_excel_cells_never_become_formulas() -> None:
     assert _cell("=HYPERLINK(1)") == "'=HYPERLINK(1)"
     assert _cell("@SUM(A1)") == "'@SUM(A1)" and _cell("fake-model") == "fake-model"
     assert _cell(42) == 42
+
+
+def test_ft05_no_llm_questions_elsewhere_during_a_no_ai_work(
+    client: TestClient, ws: dict[str, Any], school: School, db: Session
+) -> None:
+    task_id = _own_task(client, ws)
+    client.post(
+        f"/api/courses/{ws['course']['id']}/assignments",
+        headers=ws["teacher"],
+        json={"task_id": task_id, "user_id": school["student_a"].id},
+    )
+    sid = client.post(
+        "/api/sessions", headers=ws["student"], json={"task_id": task_id, "assessment_id": None}
+    ).json()
+    assert sid["genai_mode"] == "forbidden"  # the running "1-БЖ" allows no AI
+    submitted = _submit(client, ws, sid["session_id"])
+    explanation = db.scalar(select(Explanation).where(Explanation.submission_id == submitted["id"]))
+    assert explanation is not None and explanation.question_source == "template"
