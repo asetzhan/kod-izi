@@ -58,6 +58,7 @@ services:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     networks:
+      public: {}
       edge:
         ipv4_address: 172.28.0.10
     depends_on:
@@ -175,6 +176,29 @@ services:
       redis:
         condition: service_healthy
 
+  # External platforms (ОТ-08, Q-18): the only worker that reaches the internet, and only
+  # to call the Codeforces API with the handle a student linked. No Judge0, no LLM.
+  connector:
+    build:
+      context: ../backend
+      target: app
+    environment:
+      APP_ENV: ${APP_ENV:-dev}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      JWT_SECRET: connector-does-not-issue-tokens-000000000
+    command: sh -c 'rq worker --url "$$REDIS_URL" external'
+    mem_limit: 512m
+    pids_limit: 128
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    networks: [data, egress]
+    depends_on:
+      redis:
+        condition: service_healthy
+
   clamav:
     image: clamav/clamav:1.4
     # `egress` only for signature updates (freshclam); files arrive over `scan`.
@@ -277,7 +301,11 @@ services:
       retries: 10
 
 networks:
+  # Only Nginx is on `public`, to publish its port. `edge` is internal: the backend and
+  # the frontend have no route to the internet (Q-09, Q-18).
+  public: {}
   edge:
+    internal: true
     ipam:
       config:
         # Fixed subnet so the backend trusts X-Forwarded-For only from Nginx.
@@ -288,8 +316,8 @@ networks:
     internal: true
   llm:
     internal: true
-  # Internet access for ClamAV signatures and Ollama models only; nothing of the
-  # application (Nginx, backend, frontend) is on this network.
+  # Internet access for ClamAV signatures, Ollama models and the Codeforces connector
+  # (Q-18) only; nothing of the web tier (Nginx, backend, frontend) is on this network.
   egress: {}
   scan:
     internal: true

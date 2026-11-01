@@ -19,6 +19,9 @@ from app.core.enums import CoursePart, TaskStatus, Verdict
 from app.models import (
     AiMessage,
     AppSetting,
+    Assessment,
+    AssessmentTask,
+    ContestParticipation,
     Course,
     CourseGroup,
     GroupMember,
@@ -109,11 +112,30 @@ def can_practice(db: Session, user: User, task: Task, now: datetime | None = Non
         course is not None
         and course.part == CoursePart.PART2.value
         and task.status == TaskStatus.APPROVED.value
-        and task.in_bank
+        and (task.in_bank or took_part_in_finished_contest(db, user.id, task.id, now))
         and course in part2_courses(db, user)
         and bool(unlock_state(db, user)["unlocked"])
         and not in_unfinished_assessment(db, task.id, now)
         and not in_running_contest(db, user.id, task.id, now)
+    )
+
+
+def took_part_in_finished_contest(db: Session, user_id: int, task_id: int, now: datetime) -> bool:
+    """ОТ-07: a participant upsolves the problems of a finished contest, even ones a coach
+    keeps out of the bank."""
+    return (
+        db.scalar(
+            select(Assessment.id)
+            .join(AssessmentTask, AssessmentTask.assessment_id == Assessment.id)
+            .join(ContestParticipation, ContestParticipation.assessment_id == Assessment.id)
+            .where(
+                AssessmentTask.task_id == task_id,
+                ContestParticipation.user_id == user_id,
+                Assessment.ends_at < now,
+            )
+            .limit(1)
+        )
+        is not None
     )
 
 

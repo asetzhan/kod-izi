@@ -19,7 +19,8 @@ export function OlympiadPage() {
       <section className="card">
         <h1>{t("olympiad.title")}</h1>
         <p>
-          <Link to="/student/contests">{t("contest.list")}</Link>
+          <Link to="/student/contests">{t("contest.list")}</Link> ·{" "}
+          <Link to="/student/knowledge-map">{t("knowledge.title")}</Link>
         </p>
         {!unlock.unlocked && (
           <p role="alert">{t("olympiad.locked", { topics: unlock.missing.join(", ") })}</p>
