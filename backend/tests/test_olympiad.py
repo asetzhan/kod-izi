@@ -13,8 +13,10 @@ from app.models import (
     AiMessage,
     AppSetting,
     Assessment,
+    AssessmentTask,
     AuditLog,
     Course,
+    Explanation,
     Task,
     WorkSession,
 )
@@ -648,3 +650,57 @@ def test_ot06_a_run_lock_is_released_only_by_its_owner(redis: Any, school: Schoo
     mine = _one_run_at_a_time(redis, user)
     _release(redis, user, mine)
     assert redis.get(f"olympiad_run:{user.id}") is None
+
+
+def test_ot02_no_llm_and_no_early_access_through_control_works(
+    client: TestClient, oly: dict[str, Any], db: Session
+) -> None:
+    contest = _contest(client, oly, 60, 120)  # upcoming, problems 0 and 1
+    begin = datetime.now(UTC) - timedelta(minutes=5)
+    control = Assessment(
+        course_id=oly["course"]["id"],
+        title="Open homework",
+        starts_at=begin,
+        ends_at=begin + timedelta(hours=3),
+        genai_mode="open",
+    )
+    db.add(control)
+    db.flush()
+    db.add(AssessmentTask(assessment_id=control.id, task_id=oly["tasks"][0]))
+    db.add(AssessmentTask(assessment_id=control.id, task_id=oly["tasks"][2]))
+    db.flush()
+    # The contest problem is not opened early through the homework.
+    assert _session(client, oly["a"], oly["tasks"][0], control.id).status_code == 403
+    # While a round of the course runs, a submission elsewhere gets template questions.
+    db.execute(
+        update(Assessment)
+        .where(Assessment.id == contest["id"])
+        .values(starts_at=datetime.now(UTC) - timedelta(minutes=10))
+    )
+    sid = _session(client, oly["a"], oly["tasks"][2], control.id).json()["session_id"]
+    response = client.post(
+        f"/api/sessions/{sid}/submit",
+        headers=oly["a"],
+        json={"code": SOLUTION, "explanation": "n % 2"},
+    )
+    assert response.status_code == 201
+    explanation = db.scalar(
+        select(Explanation).where(Explanation.submission_id == response.json()["id"])
+    )
+    assert explanation is not None and explanation.question_source == "template"
+
+
+def test_ot03_virtual_round_accepts_trace_events(client: TestClient, oly: dict[str, Any]) -> None:
+    past = _contest(client, oly, -200, 120)
+    client.post(f"/api/contests/{past['id']}/virtual", headers=oly["a"])
+    sid = _session(client, oly["a"], oly["tasks"][0], past["id"]).json()["session_id"]
+    event = {
+        "seq": 1,
+        "kind": "snapshot",
+        "client_ts": datetime.now(UTC).isoformat(),
+        "payload": {"code": "int main() {}"},
+    }
+    response = client.post(
+        f"/api/sessions/{sid}/events", headers=oly["a"], json={"events": [event]}
+    )
+    assert response.status_code == 200, response.text

@@ -173,7 +173,7 @@ def parse_native(files: dict[str, bytes]) -> TaskDraftData:
             source_note=str(config.get("source_note", "")),
             tags=_tags(config.get("tags", [])),
             cf_rating=_int(config["cf_rating"]) if config.get("cf_rating") is not None else None,
-            in_bank=bool(config.get("in_bank", True)),
+            in_bank=_bool(config.get("in_bank", True), "in_bank"),
             editorial_md=_text(files, "editorial.md").strip() if "editorial.md" in files else "",
             subtask_points=_subtask_points(config.get("subtask_points", {})),
         )
@@ -212,6 +212,12 @@ def _features(raw: object) -> dict[str, int] | None:
     if any(not 0 <= v <= 2 for v in scores.values()):
         raise TaskImportError("bad_config", "feature scores must be 0, 1 or 2")
     return scores
+
+
+def _bool(value: object, name: str) -> bool:
+    if not isinstance(value, bool):  # "false" as a string would read as True
+        raise TaskImportError("bad_config", f"{name} must be true or false")
+    return value
 
 
 def _int(value: object) -> int:

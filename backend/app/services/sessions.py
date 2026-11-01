@@ -14,7 +14,7 @@ from app.core.enums import ParticipationKind, TaskStatus, TraceKind
 from app.core.roles import Role
 from app.models import Assessment, AssessmentTask, Task, TraceEvent, User, WorkSession
 from app.services.access import can_edit_course, is_staff, studies_course
-from app.services.contests import active_window, is_contest, join_official
+from app.services.contests import active_window, in_unfinished_contest, is_contest, join_official
 from app.services.olympiad import can_practice
 from app.services.trace import record_server_event
 
@@ -56,6 +56,9 @@ def _check_access(db: Session, user: User, task: Task, assessment: Assessment | 
             if window.kind == ParticipationKind.OFFICIAL:
                 join_official(db, user, assessment, now)
             return
+        if in_unfinished_contest(db, task.id, now):
+            # The same problem in a contest that has not ended: no early access (ОТ-02).
+            raise SessionError(403, "forbidden")
         if now < assessment.starts_at:
             raise SessionError(403, "forbidden")
         if now > assessment.ends_at:
