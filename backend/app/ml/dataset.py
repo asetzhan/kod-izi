@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.ml.features import FEATURE_DIM, code_features
-from app.models import Submission, Task, TaskKnowledgeComponent
+from app.models import Submission, Task, TaskKnowledgeComponent, User
 from app.services.analytics import process_report, work_events
 from app.services.bkt import _correct
 
@@ -31,8 +31,11 @@ class Sequence:
     steps: list[Step] = field(default_factory=list)
 
 
-def from_database(db: Session, course_id: int) -> tuple[list[int], list[Sequence]]:
-    """Component ids of the course and one sequence per student who has graded attempts."""
+def from_database(
+    db: Session, course_id: int, user_id: int | None = None
+) -> tuple[list[int], list[Sequence]]:
+    """Component ids of the course and one sequence per student who has graded attempts
+    (only `user_id`'s when given). Students who withdrew consent are left out (14.3)."""
     links = db.execute(
         select(TaskKnowledgeComponent.task_id, TaskKnowledgeComponent.knowledge_component_id)
         .join(Task, Task.id == TaskKnowledgeComponent.task_id)
@@ -45,11 +48,20 @@ def from_database(db: Session, course_id: int) -> tuple[list[int], list[Sequence
     for task_id, kc in links:
         by_task.setdefault(task_id, []).append(index[kc])
     sequences: dict[int, Sequence] = {}
-    for s in db.scalars(
+    query = (
         select(Submission)
-        .where(Submission.task_id.in_(list(by_task)), Submission.verdict.is_not(None))
+        .join(User, User.id == Submission.user_id)
+        .where(
+            Submission.task_id.in_(list(by_task)),
+            Submission.verdict.is_not(None),
+            User.consent_withdrawn_at.is_(None),
+            User.anonymized_at.is_(None),
+        )
         .order_by(Submission.created_at, Submission.id)
-    ):
+    )
+    if user_id is not None:
+        query = query.where(Submission.user_id == user_id)
+    for s in db.scalars(query):
         features = code_features(
             s.code,
             s.static_analysis,

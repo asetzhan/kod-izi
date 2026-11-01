@@ -85,3 +85,32 @@ def test_ft40_code_dkt_trains_and_beats_bkt_on_test_data(tmp_path: Path) -> None
     assert len(probabilities) == 5 and all(0 <= p <= 1 for p in probabilities)
     report = train.report_markdown(result)
     assert "BKT, AUC" in report and "жүйеде ешқашан қолданылмайды" in report
+
+
+def _tiny_model(directory: Path, kc_id: int) -> None:
+    from app.ml import code_dkt
+
+    model = code_dkt.train(synthetic(students=20, components=1, steps=4), 1, epochs=1, hidden=8)
+    meta = code_dkt.Meta(
+        components=[kc_id], hidden=8, auc=0.9, bkt_auc=0.7, trained_on=20, synthetic=False
+    )
+    code_dkt.save(model, meta, directory)
+
+
+def test_ft40_a_better_real_model_is_used_and_a_broken_one_is_not(
+    client: TestClient, modelled: dict[str, Any], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pytest.importorskip("torch")
+    monkeypatch.setattr(get_settings(), "code_dkt_dir", tmp_path)
+    ws = modelled
+    _submit(client, ws, _open(client, ws), SOLUTION)
+    directory = model_dir(ws["course"]["id"])
+    _tiny_model(directory, ws["parity"].id)
+    url = f"/api/my/progress?course_id={ws['course']['id']}"
+    data = client.get(url, headers=ws["student"]).json()
+    assert data["trajectory"]["engine"] == "code_dkt"
+    parity = next(c for c in data["trajectory"]["components"] if c["code"] == "cond.parity")
+    assert 0 <= parity["p_learned"] <= 1
+    (directory / "code_dkt.pt").write_bytes(b"not a model")  # a broken file
+    broken = client.get(url, headers=ws["student"])
+    assert broken.status_code == 200 and broken.json()["trajectory"]["engine"] == "bkt"

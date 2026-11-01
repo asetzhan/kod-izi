@@ -27,6 +27,13 @@ EXPOSE 8000
 # Proxy headers are trusted only where the proxy address is known (infra/docker-compose.yml).
 CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
 
+# Code-DKT (ФТ-40, Q-19): the app plus PyTorch for CPU, installed at build time from the
+# PyTorch index only (no second index, so no package can be swapped in from elsewhere).
+FROM app AS ml
+USER root
+RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu "torch==2.14.1"
+USER app
+
 # Code similarity worker (ФТ-30): the same app plus a JRE and JPlag, checked by its hash.
 FROM app AS analyzer
 USER root

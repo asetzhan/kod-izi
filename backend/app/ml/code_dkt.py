@@ -113,8 +113,14 @@ def save(model: CodeDKT, meta: Meta, directory: Path) -> None:
     (directory / META_FILE).write_text(json.dumps(asdict(meta), indent=2), encoding="utf-8")
 
 
+MAX_HIDDEN = 512
+MAX_COMPONENTS = 2000
+
+
 def load(directory: Path) -> tuple[CodeDKT, Meta]:
     meta = Meta(**json.loads((directory / META_FILE).read_text(encoding="utf-8")))
+    if not (0 < meta.hidden <= MAX_HIDDEN and 0 < len(meta.components) <= MAX_COMPONENTS):
+        raise ValueError("model metadata out of range")
     model = CodeDKT(len(meta.components), meta.hidden)
     # weights_only: the file holds tensors only, never pickled objects.
     model.load_state_dict(torch.load(directory / MODEL_FILE, weights_only=True))

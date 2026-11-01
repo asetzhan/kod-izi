@@ -82,13 +82,14 @@ services:
   backend:
     build:
       context: ../backend
-      target: app
+      target: ${BACKEND_TARGET:-app}  # `ml` to use Code-DKT (ФТ-40)
     environment: *backend-env
     volumes:
       - ../backend:/app
       - ../.claude:/repo/.claude:ro
       - ../seed:/seed:ro
       - materials:/data/materials
+      - models:/data/models:ro # Code-DKT models, written only by `trainer`
     command: >
       sh -c "alembic upgrade head &&
              uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
@@ -198,6 +199,23 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+
+  # Code-DKT training (ФТ-40, Q-19): `make train-dkt COURSE=N`. Reads the course's data,
+  # writes the model; no internet, nothing else.
+  trainer:
+    build:
+      context: ../backend
+      target: ml
+    profiles: [ml]
+    environment:
+      APP_ENV: ${APP_ENV:-dev}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      JWT_SECRET: trainer-does-not-issue-tokens-0000000000
+    volumes:
+      - models:/data/models
+    mem_limit: 4g
+    networks: [data]
 
   clamav:
     image: clamav/clamav:1.4
@@ -323,6 +341,7 @@ networks:
     internal: true
 
 volumes:
+  models: {}
   pgdata: {}
   materials: {}
   ollama: {}

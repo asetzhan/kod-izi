@@ -65,8 +65,13 @@ def _target_level(rows: list[dict[str, Any]], topic_id: int) -> str:
     return LEVELS[min(highest + 1, len(LEVELS) - 1)]
 
 
-def next_step(db: Session, course_id: int, user_id: int, limit: int = 5) -> dict[str, Any]:
-    engine, model = student_model(db, course_id, user_id)
+Model = tuple[str, list[dict[str, Any]]]
+
+
+def next_step(
+    db: Session, course_id: int, user_id: int, limit: int = 5, model_rows: Model | None = None
+) -> dict[str, Any]:
+    engine, model = model_rows or student_model(db, course_id, user_id)
     weak = sorted(
         (m for m in model if not m["mastered"]), key=lambda m: (m["p_learned"], m["kc_id"])
     )
@@ -124,7 +129,9 @@ def next_step(db: Session, course_id: int, user_id: int, limit: int = 5) -> dict
     }
 
 
-def trajectory(db: Session, course_id: int, user_id: int) -> dict[str, Any]:
+def trajectory(
+    db: Session, course_id: int, user_id: int, model_rows: Model | None = None
+) -> dict[str, Any]:
     """Confirmed results over time, mastery per topic and level, and the student model."""
     points = []
     for submission, grade in confirmed_grades(db, course_id, user_id):
@@ -148,7 +155,7 @@ def trajectory(db: Session, course_id: int, user_id: int) -> dict[str, Any]:
             }
         )
     course = db.get(Course, course_id)
-    engine, model = student_model(db, course_id, user_id)
+    engine, model = model_rows or student_model(db, course_id, user_id)
     return {
         "engine": engine,
         "course": course.title if course else "",

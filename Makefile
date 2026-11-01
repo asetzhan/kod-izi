@@ -53,9 +53,10 @@ backup: env
 retention: env
 	$(BACKEND) python -m app.cli retention
 
-# ФТ-40 (Q-19): PyTorch CPU is installed into the backend container on demand.
+# ФТ-40 (Q-19): the `trainer` image has PyTorch (CPU); the model goes to the `models` volume.
 train-dkt: env
-	$(BACKEND) sh -c 'pip install -q -e ".[ml]" --extra-index-url https://download.pytorch.org/whl/cpu && python -m app.cli train-dkt --course-id $(COURSE) --report /app/models/code-dkt-report.md'
+	@case "$(COURSE)" in ''|*[!0-9]*) echo "usage: make train-dkt COURSE=<course id>"; exit 1;; esac
+	$(COMPOSE) --profile ml run --rm trainer python -m app.cli train-dkt --course-id "$(COURSE)" --report /data/models/course-$(COURSE)/report.md
 
 test: test-backend test-frontend
 

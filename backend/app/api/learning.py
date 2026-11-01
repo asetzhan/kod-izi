@@ -34,6 +34,7 @@ from app.services import audit, bkt
 from app.services.access import can_edit_course, can_view_user, studies_course
 from app.services.audit import AuditAction
 from app.services.progress import next_step, trajectory
+from app.services.student_model import student_model
 from app.services.task_generation import (
     GenerationError,
     chapters,
@@ -66,9 +67,10 @@ def student_progress(
         raise _forbidden()
     if not studies_course(db, student_id, course_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="not_found")
+    model = student_model(db, course_id, student_id)  # computed once for both parts
     return {
-        "next": next_step(db, course_id, student_id),
-        "trajectory": trajectory(db, course_id, student_id),
+        "next": next_step(db, course_id, student_id, model_rows=model),
+        "trajectory": trajectory(db, course_id, student_id, model_rows=model),
     }
 
 
@@ -78,9 +80,10 @@ def my_progress(course_id: int, user: CurrentUser, db: DbSession) -> dict[str, A
     (ФТ-05), the student sees what to work on and which lessons to revisit."""
     if not studies_course(db, user.id, course_id):
         raise _forbidden()
-    step = next_step(db, course_id, user.id)
+    model = student_model(db, course_id, user.id)
+    step = next_step(db, course_id, user.id, model_rows=model)
     step["tasks"] = []
-    return {"next": step, "trajectory": trajectory(db, course_id, user.id)}
+    return {"next": step, "trajectory": trajectory(db, course_id, user.id, model_rows=model)}
 
 
 @router.get("/settings/bkt")

@@ -6,6 +6,7 @@ In every other case (no model, a broken file, a weaker model) the system falls b
 """
 
 import json
+import logging
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,8 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.services import bkt
+
+log = logging.getLogger(__name__)
 
 
 def model_dir(course_id: int) -> Path:
@@ -36,8 +39,15 @@ def code_dkt_usable(course_id: int) -> bool:
     return True
 
 
+def _stamp(course_id: int) -> tuple[int, int, int, int]:
+    """Both files' change time and size: a new model or new metadata reloads."""
+    model = (model_dir(course_id) / "code_dkt.pt").stat()
+    meta = (model_dir(course_id) / "code_dkt.json").stat()
+    return (model.st_mtime_ns, model.st_size, meta.st_mtime_ns, meta.st_size)
+
+
 @lru_cache(maxsize=16)
-def _loaded(course_id: int, stamp: float) -> Any:
+def _loaded(course_id: int, stamp: tuple[int, int, int, int]) -> Any:
     from app.ml import code_dkt
 
     return code_dkt.load(model_dir(course_id))
@@ -51,14 +61,16 @@ def student_model(db: Session, course_id: int, user_id: int) -> tuple[str, list[
     try:
         from app.ml import code_dkt, dataset
 
-        stamp = (model_dir(course_id) / code_dkt.MODEL_FILE).stat().st_mtime
-        model, meta = _loaded(course_id, stamp)
-        components, sequences = dataset.from_database(db, course_id)
+        model, meta = _loaded(course_id, _stamp(course_id))
+        # A savepoint: a failed query here must not break the rest of the request.
+        with db.begin_nested():
+            components, sequences = dataset.from_database(db, course_id, user_id)
         if components != meta.components:
             return "bkt", rows  # the course changed since training: retrain first
-        mine = next((q for q in sequences if q.student == user_id), dataset.Sequence(user_id))
+        mine = sequences[0] if sequences else dataset.Sequence(user_id)
         probabilities = dict(zip(meta.components, code_dkt.mastery(model, mine), strict=True))
     except Exception:  # any problem with the model: BKT, never an error for the student
+        log.warning("Code-DKT unavailable for course %s, using BKT", course_id, exc_info=True)
         return "bkt", rows
     threshold = bkt.get_params(db).threshold
     for row in rows:
