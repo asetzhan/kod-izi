@@ -7,6 +7,7 @@ import type { Assessment, Course, GenAiMode, Task, TaskSummary } from "../../api
 import { useResource } from "../../api/useResource";
 import { ErrorText, Status } from "../../components/Status";
 import { TopicList } from "../../components/TopicList";
+import { GenerateTask } from "./GenerateTask";
 
 const GENAI_MODES: GenAiMode[] = ["forbidden", "hints_only", "open"];
 
@@ -48,9 +49,12 @@ export function CoursePage() {
       <section className="card">
         <h2>{t("task.bank")}</h2>
         {course.data.can_edit && (
-          <p>
-            <Link to={`/teacher/courses/${courseId}/tasks/new`}>{t("task.new")}</Link>
-          </p>
+          <>
+            <p>
+              <Link to={`/teacher/courses/${courseId}/tasks/new`}>{t("task.new")}</Link>
+            </p>
+            <GenerateTask courseId={Number(courseId)} topics={course.data.topics} />
+          </>
         )}
         <Status loading={tasks.loading} error={tasks.error} />
         <table>

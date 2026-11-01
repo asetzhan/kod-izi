@@ -31,6 +31,7 @@ export function ActivityPage() {
       <AnalysisSettings assessmentId={Number(assessmentId)} />
       <PilotData assessmentId={Number(assessmentId)} />
       <ProcessReport assessmentId={Number(assessmentId)} />
+      <Similarity assessmentId={Number(assessmentId)} taskIds={assessment.data.task_ids} titles={titles} />
       <Status loading={activity.loading} error={activity.error} />
       <table>
         <thead>
@@ -270,6 +271,75 @@ function ProcessReport({ assessmentId }: { assessmentId: number }) {
             .join(", ")}
         </p>
       )}
+    </div>
+  );
+}
+
+interface SimilarityReport {
+  id: number;
+  task_id: number;
+  status: "pending" | "done" | "failed";
+  engine: string;
+  error: string | null;
+  pairs: { a: number; b: number; a_name: string; b_name: string; similarity: number }[];
+}
+
+/** ФТ-30: code similarity of the submissions (JPlag); a hint for the teacher, not evidence. */
+function Similarity({
+  assessmentId,
+  taskIds,
+  titles,
+}: {
+  assessmentId: number;
+  taskIds: number[];
+  titles: Map<number, string>;
+}) {
+  const { t } = useTranslation();
+  const reports = useResource<SimilarityReport[]>(`/api/assessments/${assessmentId}/similarity`);
+  const [error, setError] = useState<unknown>(null);
+
+  const start = async (taskId: number) => {
+    setError(null);
+    try {
+      await apiSend("POST", `/api/assessments/${assessmentId}/similarity`, { task_id: taskId });
+      reports.reload();
+    } catch (caught) {
+      setError(caught);
+    }
+  };
+
+  return (
+    <div>
+      <h2>{t("similarity.title")}</h2>
+      <p className="muted">{t("similarity.help")}</p>
+      <div className="row">
+        {taskIds.map((id) => (
+          <button key={id} type="button" onClick={() => start(id)}>
+            {t("similarity.check", { task: titles.get(id) ?? `#${id}` })}
+          </button>
+        ))}
+        <button type="button" onClick={reports.reload}>
+          {t("contest.refresh")}
+        </button>
+      </div>
+      {error !== null && <ErrorText error={error} />}
+      {reports.data?.map((r) => (
+        <div key={r.id}>
+          <h3>
+            {titles.get(r.task_id) ?? `#${r.task_id}`} · {t(`similarity.status.${r.status}`)}
+            {r.engine && ` (${r.engine})`}
+          </h3>
+          {r.error && <p className="flag">{r.error}</p>}
+          {r.status === "done" && r.pairs.length === 0 && <p className="muted">{t("similarity.none")}</p>}
+          <ul>
+            {r.pairs.slice(0, 20).map((p) => (
+              <li key={`${p.a}-${p.b}`} className={p.similarity >= 0.8 ? "flag" : undefined}>
+                {p.a_name} — {p.b_name}: {Math.round(p.similarity * 100)}%
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
     </div>
   );
 }
