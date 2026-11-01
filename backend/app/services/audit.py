@@ -50,6 +50,7 @@ class AuditAction(StrEnum):
     CONTEST_SAVED = "contest_saved"
     VIRTUAL_CONTEST_STARTED = "virtual_contest_started"
     OLYMPIAD_SETTINGS_CHANGED = "olympiad_settings_changed"
+    TASK_ASSIGNED = "task_assigned"
 
 
 def record(

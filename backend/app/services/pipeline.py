@@ -15,6 +15,7 @@ from app.llm.base import LLMProvider
 from app.llm.ollama import LLMUnavailableError
 from app.models import AiGrade, Assessment, Submission
 from app.services import ai_grading
+from app.services.assignments import assignment_for
 from app.services.component_fill import fill_submission
 from app.services.contests import is_contest
 from app.services.grading import grade_submission
@@ -36,9 +37,10 @@ def run_pipeline(
     submission.static_analysis = analyser(submission.code, submission.language)
     db.flush()
     assessment = db.get(Assessment, submission.assessment_id) if submission.assessment_id else None
-    if assessment is None or is_contest(assessment):
+    assigned = assessment is None and assignment_for(db, submission.user_id, submission.task_id)
+    if (assessment is None and not assigned) or is_contest(assessment):
         # Olympiad practice and contests: the verdict is the result; the AI analysis
-        # after a contest (ОТ-07) is a later stage.
+        # after a contest (ОТ-07) is a later stage. An individual task (ФТ-05) is graded.
         return None
     try:
         grade = ai_grading.grade(db, provider, submission)

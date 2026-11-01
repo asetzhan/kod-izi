@@ -14,6 +14,7 @@ from app.core.enums import CoursePart, GenAiMode, TraceKind
 from app.llm import gateway
 from app.llm.base import LLMProvider, LLMRequest
 from app.models import AiMessage, Assessment, Course, Task, WorkSession
+from app.services.assignments import assignment_for
 from app.services.contests import writing_any_contest
 from app.services.materials import find_fragments, fragments_block
 from app.services.trace import record_server_event
@@ -156,8 +157,11 @@ def ask(
     assessment = db.get(Assessment, session.assessment_id) if session.assessment_id else None
     if task is None:
         raise ValueError("session without task")
+    assignment = assignment_for(db, session.user_id, task.id) if assessment is None else None
     if assessment is not None:
         mode = GenAiMode(assessment.genai_mode)
+    elif assignment is not None:
+        mode = GenAiMode(assignment.genai_mode)  # ФТ-05: the teacher chose the mode
     elif _is_part2(db, task):
         # ОТ-05: olympiad practice gets only the step-by-step hints (olympiad_hint), so
         # the order direction → idea → pseudocode cannot be skipped through free questions.
