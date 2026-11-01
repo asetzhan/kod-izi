@@ -21,6 +21,8 @@ import { StudentHomePage } from "./pages/student/StudentHomePage";
 import { WorkspacePage } from "./pages/student/WorkspacePage";
 import { ActivityPage } from "./pages/teacher/ActivityPage";
 import { ContestAdminPage } from "./pages/teacher/ContestAdminPage";
+import { MonitoringPage } from "./pages/teacher/MonitoringPage";
+import { ReplayPage } from "./pages/teacher/ReplayPage";
 import { MasteryPage } from "./pages/teacher/MasteryPage";
 import { MaterialsPage } from "./pages/teacher/MaterialsPage";
 import { ModelPanelPage } from "./pages/teacher/ModelPanelPage";
@@ -126,6 +128,18 @@ export function App() {
         <Route
           path="/coach/courses/:courseId/contests"
           element={<RequireRole role="coach"><ContestAdminPage /></RequireRole>}
+        />
+        <Route
+          path="/teacher/courses/:courseId/monitoring"
+          element={<RequireRole role="teacher"><MonitoringPage /></RequireRole>}
+        />
+        <Route
+          path="/teacher/sessions/:sessionId/replay"
+          element={<RequireRole role="teacher"><ReplayPage /></RequireRole>}
+        />
+        <Route
+          path="/student/tasks/:taskId"
+          element={<RequireRole role="student"><WorkspacePage key="assigned" /></RequireRole>}
         />
         <Route path="*" element={<RootRedirect />} />
       </Route>

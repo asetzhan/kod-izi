@@ -19,6 +19,7 @@ export function StudentHomePage() {
         <p>
           <Link to="/student/results">{t("results.title")}</Link>
         </p>
+        <MyAssignments />
         <p className="row">
           <Link to="/student/olympiad">{t("olympiad.title")}</Link>
           <Link to="/student/contests">{t("contest.list")}</Link>
@@ -55,5 +56,35 @@ function StudentCourse({ id }: { id: number }) {
       <h2>{course.data.title}</h2>
       <TopicList topics={course.data.topics} />
     </section>
+  );
+}
+
+interface MyAssignment {
+  id: number;
+  task_id: number;
+  task_title: string;
+  note: string;
+  due_at: string | null;
+  last_verdict: string | null;
+}
+
+/** ФТ-05: tasks the teacher gave this student. */
+function MyAssignments() {
+  const { t } = useTranslation();
+  const mine = useResource<MyAssignment[]>("/api/my/assignments");
+  if (!mine.data?.length) return null;
+  return (
+    <>
+      <h2>{t("assignments.mine")}</h2>
+      <ul>
+        {mine.data.map((a) => (
+          <li key={a.id}>
+            <Link to={`/student/tasks/${a.task_id}`}>{a.task_title}</Link>
+            {a.note && <span className="muted"> — {a.note}</span>}
+            {a.last_verdict && <> · {t(`verdicts.${a.last_verdict}`)}</>}
+          </li>
+        ))}
+      </ul>
+    </>
   );
 }

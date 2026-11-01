@@ -30,6 +30,7 @@ export function ActivityPage() {
       <p className="muted">{t("activity.hint")}</p>
       <AnalysisSettings assessmentId={Number(assessmentId)} />
       <PilotData assessmentId={Number(assessmentId)} />
+      <ProcessReport assessmentId={Number(assessmentId)} />
       <Status loading={activity.loading} error={activity.error} />
       <table>
         <thead>
@@ -66,7 +67,13 @@ export function ActivityPage() {
               <td>{row.pasted_chars}</td>
               <td>{row.focus_lost}</td>
               <td className={row.late_events > 0 ? "flag" : undefined}>{row.late_events}</td>
-              <td>{row.sessions.length}</td>
+              <td>
+                {row.sessions.map((sid, i) => (
+                  <Link key={sid} to={`/teacher/sessions/${sid}/replay`} title={t("replay.title")}>
+                    {i > 0 && ", "}▶{i + 1}
+                  </Link>
+                ))}
+              </td>
             </tr>
           ))}
         </tbody>
@@ -137,6 +144,9 @@ function PilotData({ assessmentId }: { assessmentId: number }) {
   const exportCsv = run(() =>
     downloadFile(`/api/assessments/${assessmentId}/export.csv`, `assessment-${assessmentId}.csv`),
   );
+  const exportXlsx = run(() =>
+    downloadFile(`/api/assessments/${assessmentId}/export.xlsx`, `assessment-${assessmentId}.xlsx`),
+  );
   const loadStats = run(async () =>
     setStats(await apiGet<Record<string, Stats>>(`/api/assessments/${assessmentId}/agreement`)),
   );
@@ -145,6 +155,9 @@ function PilotData({ assessmentId }: { assessmentId: number }) {
     <div className="row">
       <button type="button" onClick={exportCsv}>
         {t("activity.export")}
+      </button>
+      <button type="button" onClick={exportXlsx}>
+        {t("activity.exportXlsx")}
       </button>
       <button type="button" onClick={loadStats}>
         {t("activity.agreement")}
@@ -178,6 +191,84 @@ function PilotData({ assessmentId }: { assessmentId: number }) {
             })}
           </tbody>
         </table>
+      )}
+    </div>
+  );
+}
+
+interface ProcessRow {
+  user_id: number;
+  full_name: string;
+  task_id: number;
+  verdict: string | null;
+  attempts: number;
+  compile_errors: number;
+  repeated_compile_errors: number;
+  fix_minutes: number;
+  minutes: number;
+  stage_events: Record<string, number>;
+}
+
+interface GenAiRow {
+  user_id: number;
+  task_id: number;
+  requests: number;
+  blocked: number;
+  max_similarity_to_final_code: number;
+}
+
+/** ФТ-33 process metrics and ФТ-38 GenAI use of each student's latest submission. */
+function ProcessReport({ assessmentId }: { assessmentId: number }) {
+  const { t } = useTranslation();
+  const process = useResource<ProcessRow[]>(`/api/assessments/${assessmentId}/process`);
+  const genai = useResource<{ by_stage: Record<string, number>; students: GenAiRow[] }>(
+    `/api/assessments/${assessmentId}/genai`,
+  );
+  if (!process.data) return <Status loading={process.loading} error={process.error} />;
+  const ai = new Map(genai.data?.students.map((g) => [`${g.user_id}:${g.task_id}`, g]));
+  return (
+    <div>
+      <h2>{t("process.title")}</h2>
+      <table aria-label={t("process.title")}>
+        <thead>
+          <tr>
+            <th>{t("activity.student")}</th>
+            <th>{t("process.attempts")}</th>
+            <th>{t("process.compileErrors")}</th>
+            <th>{t("process.repeated")}</th>
+            <th>{t("process.fixMinutes")}</th>
+            <th>{t("process.minutes")}</th>
+            <th>{t("process.aiRequests")}</th>
+            <th>{t("process.aiSimilarity")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {process.data.map((row) => {
+            const g = ai.get(`${row.user_id}:${row.task_id}`);
+            return (
+              <tr key={`${row.user_id}:${row.task_id}`}>
+                <td>{row.full_name}</td>
+                <td>{row.attempts}</td>
+                <td>{row.compile_errors}</td>
+                <td>{row.repeated_compile_errors}</td>
+                <td>{row.fix_minutes}</td>
+                <td>{row.minutes}</td>
+                <td>{g ? `${g.requests} (${g.blocked})` : "—"}</td>
+                <td className={g && g.max_similarity_to_final_code >= 0.8 ? "flag" : undefined}>
+                  {g ? `${Math.round(g.max_similarity_to_final_code * 100)}%` : "—"}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      {genai.data && Object.keys(genai.data.by_stage).length > 0 && (
+        <p className="muted">
+          {t("process.aiByStage")}:{" "}
+          {Object.entries(genai.data.by_stage)
+            .map(([stage, n]) => `${t(`stage.${stage}`)} ${n}`)
+            .join(", ")}
+        </p>
       )}
     </div>
   );
