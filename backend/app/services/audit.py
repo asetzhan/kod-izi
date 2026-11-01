@@ -47,6 +47,9 @@ class AuditAction(StrEnum):
     USER_ANONYMIZED = "user_anonymized"
     DATA_EXPORTED = "data_exported"
     FILE_LINK_ISSUED = "file_link_issued"
+    CONTEST_SAVED = "contest_saved"
+    VIRTUAL_CONTEST_STARTED = "virtual_contest_started"
+    OLYMPIAD_SETTINGS_CHANGED = "olympiad_settings_changed"
 
 
 def record(

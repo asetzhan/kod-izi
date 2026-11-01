@@ -28,6 +28,7 @@ from app.models.course import (
     Topic,
 )
 from app.models.group import Group, GroupMember, GroupTeacher
+from app.models.olympiad import ContestParticipation, StudentTest, TopicResource
 from app.models.panel import (
     ComponentEntry,
     ComponentEntryVersion,
@@ -50,6 +51,7 @@ __all__ = [
     "ComponentEntry",
     "ComponentEntryVersion",
     "ComponentSetting",
+    "ContestParticipation",
     "Course",
     "CourseGroup",
     "CourseTeacher",
@@ -67,6 +69,7 @@ __all__ = [
     "RefreshToken",
     "Rubric",
     "RubricCriterion",
+    "StudentTest",
     "Submission",
     "SubmissionTestResult",
     "Task",
@@ -74,6 +77,7 @@ __all__ = [
     "TeacherGrade",
     "TestCase",
     "Topic",
+    "TopicResource",
     "TraceEvent",
     "User",
     "UserRole",

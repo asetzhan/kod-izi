@@ -1,7 +1,7 @@
 """Request and response models for courses, tasks and assessments (stage 1)."""
 
 from datetime import datetime
-from typing import Self
+from typing import Annotated, Self
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
 
@@ -118,6 +118,7 @@ class TestCaseIn(BaseModel):
     input: str = Field(max_length=8 * 1024 * 1024)
     expected_output: str = Field(max_length=8 * 1024 * 1024)
     is_hidden: bool = True
+    subtask: int = Field(default=1, ge=1, le=50)  # IOI subtask (ОТ-02)
 
 
 class TestCaseOut(TestCaseIn):
@@ -137,6 +138,9 @@ class PublicTestOut(BaseModel):
     expected_output: str
 
 
+Tag = Annotated[str, Field(min_length=1, max_length=40, pattern=r"^[\w.+ -]+$")]
+
+
 class TaskIn(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     topic_id: int | None = None
@@ -145,7 +149,7 @@ class TaskIn(BaseModel):
     output_format: str = Field(default="", max_length=10_000)
     # Upper bounds follow Judge0's MAX_CPU_TIME_LIMIT and MAX_MEMORY_LIMIT.
     time_limit_ms: int = Field(default=1000, ge=100, le=10000)
-    memory_limit_kb: int = Field(default=262144, ge=16384, le=524288)
+    memory_limit_kb: int = Field(default=262144, ge=16384, le=1048576)
     reference_solution: str = Field(default="", max_length=200_000)
     reference_language: str = Field(default="cpp17", pattern="^cpp(17|20)$")
     source_url: HttpUrl | None = None
@@ -153,6 +157,22 @@ class TaskIn(BaseModel):
     teacher_requirements: str = Field(default="", max_length=10_000)
     tests: list[TestCaseIn] = Field(default_factory=list, max_length=500)
     knowledge_component_ids: list[int] = Field(default_factory=list, max_length=50)
+    # Olympiad bank (ОТ-01, ОТ-02, ОТ-05).
+    tags: list[Tag] = Field(default_factory=list, max_length=20)
+    cf_rating: int | None = Field(default=None, ge=800, le=3500)
+    in_bank: bool = True  # off: kept for a contest, hidden from the practice bank
+    editorial_md: str = Field(default="", max_length=100_000)
+    subtask_points: dict[Annotated[str, Field(pattern=r"^[1-9][0-9]?$")], int] = Field(
+        default_factory=dict, max_length=50
+    )
+
+    @model_validator(mode="after")
+    def _subtasks(self) -> Self:
+        if any(not 0 <= p <= 100 for p in self.subtask_points.values()):
+            raise ValueError("subtask points must be between 0 and 100")
+        if self.subtask_points and sum(self.subtask_points.values()) != 100:
+            raise ValueError("subtask points must add up to 100")
+        return self
 
     @model_validator(mode="after")
     def _total_test_size(self) -> Self:
@@ -201,6 +221,11 @@ class TaskOut(TaskSummary):
     teacher_requirements: str
     features: dict[str, int | None]
     level_rationale: str
+    tags: list[str]
+    cf_rating: int | None
+    in_bank: bool
+    editorial_md: str
+    subtask_points: dict[str, int]
     tests: list[TestCaseOut]
     knowledge_component_ids: list[int]
 
@@ -223,6 +248,11 @@ class TaskOut(TaskSummary):
                         "source_note",
                         "level_rationale",
                         "teacher_requirements",
+                        "tags",
+                        "cf_rating",
+                        "in_bank",
+                        "editorial_md",
+                        "subtask_points",
                     )
                 },
                 "features": task.features(),

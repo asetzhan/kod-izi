@@ -37,7 +37,7 @@ def _unb64(value: str | None) -> str:
 # Must not exceed MAX_* in infra/judge0/judge0.conf, or Judge0 refuses the run.
 MAX_CPU_TIME_S = 10
 MAX_WALL_TIME_S = 20
-MAX_MEMORY_KB = 524288
+MAX_MEMORY_KB = 1048576  # ОТ-01: up to 1024 MB
 
 
 def wall_time_s(cpu_time_s: float) -> float:

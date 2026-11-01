@@ -19,6 +19,10 @@ export function StudentHomePage() {
         <p>
           <Link to="/student/results">{t("results.title")}</Link>
         </p>
+        <p className="row">
+          <Link to="/student/olympiad">{t("olympiad.title")}</Link>
+          <Link to="/student/contests">{t("contest.list")}</Link>
+        </p>
         <h2>{t("assessment.schedule")}</h2>
         <Status loading={assessments.loading} error={assessments.error} />
         {assessments.data?.length === 0 && <p className="muted">{t("assessment.none")}</p>}

@@ -13,9 +13,10 @@ from app.core.enums import SubmissionStatus
 from app.judge.client import JudgeClient
 from app.llm.base import LLMProvider
 from app.llm.ollama import LLMUnavailableError
-from app.models import AiGrade, Submission
+from app.models import AiGrade, Assessment, Submission
 from app.services import ai_grading
 from app.services.component_fill import fill_submission
+from app.services.contests import is_contest
 from app.services.grading import grade_submission
 from app.services.static_analysis import analyse
 
@@ -34,6 +35,11 @@ def run_pipeline(
         return None
     submission.static_analysis = analyser(submission.code, submission.language)
     db.flush()
+    assessment = db.get(Assessment, submission.assessment_id) if submission.assessment_id else None
+    if assessment is None or is_contest(assessment):
+        # Olympiad practice and contests: the verdict is the result; the AI analysis
+        # after a contest (ОТ-07) is a later stage.
+        return None
     try:
         grade = ai_grading.grade(db, provider, submission)
         db.flush()

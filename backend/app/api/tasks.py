@@ -119,10 +119,18 @@ def _fill(db: DbSession, task: Task, body: TaskIn) -> None:
         "reference_language",
         "source_note",
         "teacher_requirements",
+        "cf_rating",
+        "in_bank",
+        "editorial_md",
     ):
         setattr(task, name, getattr(body, name))
+    task.tags = list(dict.fromkeys(body.tags))
+    task.subtask_points = dict(body.subtask_points)
     task.source_url = str(body.source_url) if body.source_url else None
-    set_tests(task, [ImportedTest(t.input, t.expected_output, t.is_hidden) for t in body.tests])
+    set_tests(
+        task,
+        [ImportedTest(t.input, t.expected_output, t.is_hidden, t.subtask) for t in body.tests],
+    )
     try:
         set_knowledge_components(db, task, body.knowledge_component_ids)
     except TaskError as exc:

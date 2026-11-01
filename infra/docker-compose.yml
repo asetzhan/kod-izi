@@ -215,6 +215,9 @@ services:
   judge0-workers:
     <<: *judge0
     command: ["./scripts/workers"]
+    # COUNT (judge0.conf) workers × MAX_MEMORY_LIMIT (1 GB, ОТ-01) must fit, with room
+    # for the workers themselves; one bad run must not take the host down.
+    mem_limit: 6g
 
   judge0-db:
     image: postgres:16-alpine

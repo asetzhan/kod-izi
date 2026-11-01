@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.api.content_schemas import StudentTaskOut
 from app.api.deps import AdminUser, CurrentUser, DbSession, RedisClient, client_ip
-from app.core.enums import GenAiMode, SubmissionStatus, TraceKind, Verdict
+from app.core.enums import GenAiMode, ParticipationKind, SubmissionStatus, TraceKind, Verdict
 from app.jobs import get_enqueue
 from app.judge import get_judge
 from app.judge.client import JudgeClient, JudgeUnavailableError, RunStatus
@@ -37,6 +37,13 @@ from app.models.course import CourseGroup
 from app.services import audit
 from app.services.access import can_edit_course, is_staff
 from app.services.audit import AuditAction
+from app.services.contests import (
+    active_window,
+    duration,
+    is_contest,
+    participation,
+    writing_any_contest,
+)
 from app.services.grading import run_request, run_tests
 from app.services.questions import generate_questions, template_questions
 from app.services.sessions import SessionError, latest_code, open_session, writable_session
@@ -186,7 +193,16 @@ def _closing_time(db: Session, session: WorkSession) -> datetime | None:
     times = [session.closed_at] if session.closed_at else []
     if session.assessment_id is not None:
         assessment = db.get(Assessment, session.assessment_id)
-        if assessment is not None and datetime.now(UTC) > assessment.ends_at:
+        now = datetime.now(UTC)
+        if assessment is not None and is_contest(assessment):
+            # A virtual round (ОТ-03) ends at its own start + duration, not at ends_at.
+            if active_window(db, session.user_id, assessment, now) is None:
+                end = assessment.ends_at
+                virtual = participation(db, session.user_id, assessment, ParticipationKind.VIRTUAL)
+                if virtual is not None:
+                    end = max(end, virtual.started_at + duration(assessment))
+                times.append(min(end, now))
+        elif assessment is not None and now > assessment.ends_at:
             times.append(assessment.ends_at)
     return min(times) if times else None
 
@@ -321,7 +337,8 @@ def run_public_tests(
 class SubmitIn(BaseModel):
     code: Code = Field(min_length=1)
     language: Language = "cpp17"
-    explanation: str = Field(min_length=1, max_length=20_000)
+    # Required in control works (ФТ-27); optional in olympiad practice and contests.
+    explanation: str = Field(default="", max_length=20_000)
     ui_language: str = Field(default="kk", pattern="^(kk|ru)$")
 
 
@@ -400,6 +417,10 @@ def submit(
     """Submission with explanation (ФТ-27); grading runs in the background (ФТ-31)."""
     session = _writable(db, user, session_id)
     task = _task(db, session.task_id)
+    assessment = db.get(Assessment, session.assessment_id) if session.assessment_id else None
+    olympiad = assessment is None or is_contest(assessment)
+    if not olympiad and not body.explanation.strip():
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail="explanation_required")
     in_flight = db.scalar(
         select(Submission.id).where(
             Submission.user_id == user.id,
@@ -425,18 +446,34 @@ def submit(
     )
     db.add(submission)
     db.flush()
+    record_server_event(
+        db,
+        session,
+        TraceKind.SUBMIT,
+        {"submission_id": submission.id, "code": body.code, "language": body.language},
+    )
+    if olympiad:
+        # No questions about the code here: no LLM call during a contest (ОТ-02).
+        db.commit()
+        enqueue(submission.id)
+        db.refresh(submission)
+        return SubmissionOut.build(submission)
     provider = get_provider()
-    try:
-        questions, source = generate_questions(
-            lambda request: gateway.call(
-                db, provider, request, purpose="questions", user_id=user.id
-            ),
-            task.statement_md,
-            body.code[:LLM_CODE_LIMIT],
-            body.ui_language,
-        )
-    except gateway.QuotaExceededError:  # LLM quota used up: template questions, no LLM call
+    if writing_any_contest(db, user.id, datetime.now(UTC)):
+        # ОТ-02: no LLM call at all while the student writes a round.
         questions, source = template_questions(body.code, body.ui_language), "template"
+    else:
+        try:
+            questions, source = generate_questions(
+                lambda request: gateway.call(
+                    db, provider, request, purpose="questions", user_id=user.id
+                ),
+                task.statement_md,
+                body.code[:LLM_CODE_LIMIT],
+                body.ui_language,
+            )
+        except gateway.QuotaExceededError:  # LLM quota used up: template questions, no LLM
+            questions, source = template_questions(body.code, body.ui_language), "template"
     db.add(
         Explanation(
             submission_id=submission.id,
@@ -445,12 +482,6 @@ def submit(
             question_source=source,
             prompt_version="own-code-questions-v1",
         )
-    )
-    record_server_event(
-        db,
-        session,
-        TraceKind.SUBMIT,
-        {"submission_id": submission.id, "code": body.code, "language": body.language},
     )
     record_server_event(
         db,

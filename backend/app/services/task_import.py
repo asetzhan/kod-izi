@@ -44,6 +44,7 @@ class ImportedTest:
     input: str
     expected_output: str
     is_hidden: bool
+    subtask: int = 1  # IOI subtask (ОТ-02)
 
 
 @dataclass
@@ -65,6 +66,12 @@ class TaskDraftData:
     knowledge_components: list[str] = field(default_factory=list)
     source_url: str | None = None
     source_note: str = ""
+    # Olympiad bank (ОТ-01, ОТ-02, ОТ-05).
+    tags: list[str] = field(default_factory=list)
+    cf_rating: int | None = None
+    in_bank: bool = True
+    editorial_md: str = ""
+    subtask_points: dict[str, int] = field(default_factory=dict)
 
 
 def read_zip(data: bytes) -> dict[str, bytes]:
@@ -129,6 +136,9 @@ def parse_native(files: dict[str, bytes]) -> TaskDraftData:
         raise TaskImportError("missing_title", "no title in config.json or statement.md")
 
     public = {str(name) for name in config.get("public_tests", ["01"])}
+    subtasks = config.get("subtasks", {})
+    if not isinstance(subtasks, dict):
+        raise TaskImportError("bad_config", "subtasks must map test numbers to subtasks")
     tests = []
     for number in _test_numbers(files):
         tests.append(
@@ -136,6 +146,7 @@ def parse_native(files: dict[str, bytes]) -> TaskDraftData:
                 input=_test_text(files, f"tests/{number}.in"),
                 expected_output=_test_text(files, f"tests/{number}.out"),
                 is_hidden=number not in public,
+                subtask=_subtask(subtasks.get(number, 1)),
             )
         )
     if not tests:
@@ -160,6 +171,11 @@ def parse_native(files: dict[str, bytes]) -> TaskDraftData:
             knowledge_components=[str(c) for c in config.get("knowledge_components", [])],
             source_url=_http_url(config.get("source_url")),
             source_note=str(config.get("source_note", "")),
+            tags=_tags(config.get("tags", [])),
+            cf_rating=_int(config["cf_rating"]) if config.get("cf_rating") is not None else None,
+            in_bank=_bool(config.get("in_bank", True), "in_bank"),
+            editorial_md=_text(files, "editorial.md").strip() if "editorial.md" in files else "",
+            subtask_points=_subtask_points(config.get("subtask_points", {})),
         )
     except (TypeError, ValueError) as exc:
         raise TaskImportError("bad_config", f"invalid value in config.json: {exc}") from None
@@ -198,12 +214,55 @@ def _features(raw: object) -> dict[str, int] | None:
     return scores
 
 
+def _bool(value: object, name: str) -> bool:
+    if not isinstance(value, bool):  # "false" as a string would read as True
+        raise TaskImportError("bad_config", f"{name} must be true or false")
+    return value
+
+
+def _int(value: object) -> int:
+    try:
+        return int(str(value))
+    except (TypeError, ValueError):
+        raise TaskImportError("bad_config", f"{value!r} is not a whole number") from None
+
+
+def _subtask(value: object) -> int:
+    if not isinstance(value, int) or not 1 <= value <= 50:
+        raise TaskImportError("bad_config", "a subtask must be a number from 1 to 50")
+    return value
+
+
+def _tags(raw: object) -> list[str]:
+    if not isinstance(raw, list) or len(raw) > 20:
+        raise TaskImportError("bad_config", "tags must be a list of at most 20 strings")
+    tags = [str(t) for t in raw]
+    if any(not re.match(r"^[\w.+ -]{1,40}$", t) for t in tags):
+        raise TaskImportError("bad_config", "a tag is 1..40 letters, digits, spaces or .+-_")
+    return list(dict.fromkeys(tags))
+
+
+def _subtask_points(raw: object) -> dict[str, int]:
+    if not isinstance(raw, dict):
+        raise TaskImportError("bad_config", "subtask_points must map subtasks to points")
+    points = {str(k): _int(v) for k, v in raw.items()}
+    if points and (
+        sum(points.values()) != 100
+        or any(not k.isdigit() or not 1 <= int(k) <= 50 for k in points)
+        or any(not 0 <= v <= 100 for v in points.values())
+    ):
+        raise TaskImportError("bad_config", "subtask_points must be 0..100 and add up to 100")
+    return points
+
+
 def _check_limits(draft: TaskDraftData) -> None:
     # Bounds follow Judge0's MAX_CPU_TIME_LIMIT and MAX_MEMORY_LIMIT (judge0.conf).
     if not 100 <= draft.time_limit_ms <= 10000:
         raise TaskImportError("bad_config", "time_limit_ms must be between 100 and 10000")
-    if not 16384 <= draft.memory_limit_kb <= 524288:
-        raise TaskImportError("bad_config", "memory_limit_kb must be between 16384 and 524288")
+    if not 16384 <= draft.memory_limit_kb <= 1048576:
+        raise TaskImportError("bad_config", "memory_limit_kb must be between 16384 and 1048576")
+    if draft.cf_rating is not None and not 800 <= draft.cf_rating <= 3500:
+        raise TaskImportError("bad_config", "cf_rating must be between 800 and 3500")
     if draft.reference_language not in ("cpp17", "cpp20"):
         raise TaskImportError("bad_config", "reference_language must be cpp17 or cpp20")
 

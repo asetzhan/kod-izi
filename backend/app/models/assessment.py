@@ -18,7 +18,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.core.enums import GenAiMode, check_in
+from app.core.enums import AssessmentKind, ContestFormat, GenAiMode, check_in
 from app.db.base import Base
 
 
@@ -27,6 +27,19 @@ class Assessment(Base):
     __table_args__ = (
         CheckConstraint(check_in("genai_mode", GenAiMode), name="genai_mode_valid"),
         CheckConstraint("ends_at > starts_at", name="window_valid"),
+        CheckConstraint(check_in("kind", AssessmentKind), name="kind_valid"),
+        CheckConstraint(
+            f"contest_format IS NULL OR {check_in('contest_format', ContestFormat)}",
+            name="contest_format_valid",
+        ),
+        # ОТ-02: the AI assistant is off during a contest.
+        CheckConstraint(
+            "kind <> 'contest' OR (contest_format IS NOT NULL AND genai_mode = 'forbidden')",
+            name="contest_valid",
+        ),
+        CheckConstraint(
+            "freeze_minutes >= 0 AND penalty_minutes >= 0", name="contest_minutes_valid"
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
@@ -35,6 +48,13 @@ class Assessment(Base):
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     genai_mode: Mapped[str] = mapped_column(String(16), default=GenAiMode.FORBIDDEN.value)
+    kind: Mapped[str] = mapped_column(
+        String(16), default=AssessmentKind.CONTROL.value, server_default="control"
+    )
+    # Contest settings (ОТ-02).
+    contest_format: Mapped[str | None] = mapped_column(String(8))
+    freeze_minutes: Mapped[int] = mapped_column(Integer, default=60, server_default="60")
+    penalty_minutes: Mapped[int] = mapped_column(Integer, default=20, server_default="20")
     # ФТ-16: requirements for the whole assessment, added to those of each task.
     teacher_requirements: Mapped[str] = mapped_column(Text, default="", server_default="")
     # ФТ-36: which data and methods the analysis of this assessment uses.

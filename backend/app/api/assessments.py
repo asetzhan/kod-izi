@@ -13,7 +13,7 @@ from app.api.content_schemas import (
     StudentTaskOut,
 )
 from app.api.deps import CurrentUser, DbSession, client_ip
-from app.core.enums import GenAiMode, TaskStatus
+from app.core.enums import AssessmentKind, GenAiMode, TaskStatus
 from app.models import Assessment, AssessmentTask, CourseGroup, GroupMember, Task, User
 from app.services import audit
 from app.services.access import can_edit_course, is_staff, studies_course
@@ -91,6 +91,8 @@ def update_assessment(
     assessment = db.get(Assessment, assessment_id)
     if assessment is None or not can_edit_course(db, user, assessment.course_id):
         raise _forbidden()
+    if assessment.kind != AssessmentKind.CONTROL.value:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="use_contest_api")
     _fill(db, assessment, body)
     return _save(db, request, user, assessment)
 
@@ -100,7 +102,12 @@ def list_assessments(
     user: CurrentUser, db: DbSession, course_id: int | None = None
 ) -> list[AssessmentOut]:
     """Staff: all assessments (optionally of one course). Students: those of their courses."""
-    query = select(Assessment).order_by(Assessment.starts_at)
+    # Contests have their own pages (/api/contests).
+    query = (
+        select(Assessment)
+        .where(Assessment.kind == AssessmentKind.CONTROL.value)
+        .order_by(Assessment.starts_at)
+    )
     if course_id is not None:
         query = query.where(Assessment.course_id == course_id)
     if not is_staff(user):

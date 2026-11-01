@@ -6,8 +6,10 @@ from app.api import (
     app_settings,
     assessments,
     auth,
+    contests,
     courses,
     health,
+    olympiad,
     panel,
     privacy,
     tasks,
@@ -38,6 +40,8 @@ def create_app() -> FastAPI:
         analysis,
         panel,
         privacy,
+        contests,
+        olympiad,
     ):
         app.include_router(module.router)
     return app

@@ -1,0 +1,26 @@
+{
+  "key": "OLY-4.1.3-1",
+  "title": "Сынық баспалдақ",
+  "level": "III",
+  "features": {
+    "knowledge_actions": 2,
+    "algorithm_freedom": 2,
+    "edge_cases": 1,
+    "justification": 1
+  },
+  "level_rationale": "Сызықтық динамика және жылжымалы қосынды; тікелей $O(nk)$ шешім уақытқа сыймайды.",
+  "topic": "4.1.3",
+  "tags": [
+    "dp",
+    "prefix sums"
+  ],
+  "cf_rating": 1500,
+  "time_limit_ms": 1000,
+  "memory_limit_kb": 262144,
+  "reference_language": "cpp17",
+  "public_tests": [
+    "01",
+    "02"
+  ],
+  "source_note": "Олимпиада есептер банкінің жобасы (Q-13): шарты, тесттері, эталон шешімі мен талдауы Claude Code дайындаған, жаттықтырушы тексеріп бекітуі керек."
+}

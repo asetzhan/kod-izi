@@ -15,7 +15,10 @@ from sqlalchemy import (
     Text,
     false,
     func,
+    text,
+    true,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.enums import LevelStatus, TaskLevel, TaskStatus, check_in
@@ -35,6 +38,12 @@ class Task(Base):
         CheckConstraint(check_in("level_status", LevelStatus), name="level_status_valid"),
         CheckConstraint(check_in("status", TaskStatus), name="status_valid"),
         *(_feature_check(code) for code in FEATURE_CODES),
+        CheckConstraint(
+            "memory_limit_kb BETWEEN 16384 AND 1048576", name="memory_limit_range"
+        ),  # ОТ-01: from 16 MB (ACMP) to 1024 MB (ICPC)
+        CheckConstraint(
+            "cf_rating IS NULL OR cf_rating BETWEEN 800 AND 3500", name="cf_rating_range"
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
@@ -63,6 +72,17 @@ class Task(Base):
     feat_edge_cases: Mapped[int | None] = mapped_column(SmallInteger)
     feat_justification: Mapped[int | None] = mapped_column(SmallInteger)
     level_rationale: Mapped[str] = mapped_column(Text, default="", server_default="")
+    # Olympiad bank (ОТ-01): topic tags and Codeforces difficulty rating.
+    tags: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default=text("'[]'::jsonb"))
+    cf_rating: Mapped[int | None] = mapped_column(Integer)
+    # ОТ-01: off for problems kept for a contest; students then never see them in the bank.
+    in_bank: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+    # ОТ-05: the tutorial, shown after the student spent an hour on the problem.
+    editorial_md: Mapped[str] = mapped_column(Text, default="", server_default="")
+    # ОТ-02, IOI: points per subtask ("1": 30, "2": 70); empty means per test.
+    subtask_points: Mapped[dict[str, int]] = mapped_column(
+        JSONB, default=dict, server_default=text("'{}'::jsonb")
+    )
     level: Mapped[str | None] = mapped_column(String(3))
     level_status: Mapped[str] = mapped_column(String(16), default=LevelStatus.UNRATED.value)
 
@@ -99,6 +119,8 @@ class TestCase(Base):
     expected_output: Mapped[str] = mapped_column(Text)
     # Hidden tests never leave the server for students (spec 14.1).
     is_hidden: Mapped[bool] = mapped_column(Boolean, default=True, server_default=false())
+    # IOI subtask the test belongs to (ОТ-02).
+    subtask: Mapped[int] = mapped_column(SmallInteger, default=1, server_default="1")
 
 
 class TaskKnowledgeComponent(Base):

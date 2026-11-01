@@ -1,0 +1,100 @@
+{
+  "source": "docs/spec/04-part2-olympiad.md, 4.1 және 4.2 кестелерінің «Қосымша материалдар» бағаны (ОТ-10)",
+  "modules": [
+    {
+      "topic": "4.1.1",
+      "resources": [
+        {
+          "name": "Codeforces EDU",
+          "url": "https://codeforces.com/edu/course/2",
+          "purpose": "Тақырыпты басқа курстан қайта оқу"
+        },
+        {
+          "name": "ACMP курсы",
+          "url": "https://acmp.ru/asp/do/index.asp?main=course&id_course=2",
+          "purpose": "Жаңа алгоритмді практикада бекіту; жады шектеуі қатаң"
+        }
+      ]
+    },
+    {
+      "topic": "4.1.2",
+      "resources": [
+        {
+          "name": "e-maxx",
+          "url": "http://e-maxx.ru/algo/",
+          "purpose": "Түсіндірмесі бар алгоритмдер жинағы"
+        }
+      ]
+    },
+    {
+      "topic": "4.1.3",
+      "resources": [
+        {
+          "name": "CSES Problem Set",
+          "url": "https://cses.fi/problemset/",
+          "purpose": "Қосымша есеп жинағы"
+        },
+        {
+          "name": "e-maxx",
+          "url": "http://e-maxx.ru/algo/",
+          "purpose": "Түсіндірмесі бар алгоритмдер жинағы"
+        }
+      ]
+    },
+    {
+      "topic": "4.1.4",
+      "resources": [
+        {
+          "name": "CSES Problem Set",
+          "url": "https://cses.fi/problemset/",
+          "purpose": "Қосымша есеп жинағы"
+        },
+        {
+          "name": "USACO Guide",
+          "url": "https://usaco.guide/dashboard",
+          "purpose": "Қосымша курс"
+        }
+      ]
+    },
+    {
+      "topic": "4.2.1",
+      "resources": [
+        {
+          "name": "e-maxx",
+          "url": "http://e-maxx.ru/algo/",
+          "purpose": "Түсіндірмесі бар алгоритмдер жинағы"
+        }
+      ]
+    },
+    {
+      "topic": "4.2.2",
+      "resources": [
+        {
+          "name": "Codeforces EDU",
+          "url": "https://codeforces.com/edu/course/2",
+          "purpose": "Тақырыпты басқа курстан қайта оқу"
+        }
+      ]
+    },
+    {
+      "topic": "4.2.3",
+      "resources": [
+        {
+          "name": "e-maxx",
+          "url": "http://e-maxx.ru/algo/",
+          "purpose": "Түсіндірмесі бар алгоритмдер жинағы"
+        }
+      ]
+    },
+    {
+      "topic": "4.2.4",
+      "resources": [
+        {
+          "name": "e-maxx",
+          "url": "http://e-maxx.ru/algo/",
+          "purpose": "Түсіндірмесі бар алгоритмдер жинағы"
+        }
+      ]
+    }
+  ]
+}

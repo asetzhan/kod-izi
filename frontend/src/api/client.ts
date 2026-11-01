@@ -113,7 +113,11 @@ export function apiGet<T>(path: string): Promise<T> {
   return request<T>(path);
 }
 
-export function apiSend<T>(method: "POST" | "PUT" | "PATCH", path: string, body?: unknown): Promise<T> {
+export function apiSend<T>(
+  method: "POST" | "PUT" | "PATCH" | "DELETE",
+  path: string,
+  body?: unknown,
+): Promise<T> {
   return request<T>(path, {
     method,
     headers: { "Content-Type": "application/json" },

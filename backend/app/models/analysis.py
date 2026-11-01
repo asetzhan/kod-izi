@@ -15,6 +15,7 @@ from sqlalchemy import (
     ForeignKey,
     Identity,
     Integer,
+    SmallInteger,
     String,
     Text,
     UniqueConstraint,
@@ -212,6 +213,8 @@ class AiMessage(Base):
     answer: Mapped[str] = mapped_column(Text)
     # hints_only: the model's answer contained ready code and was withheld.
     blocked: Mapped[bool] = mapped_column(default=False, server_default=false())
+    # ОТ-05: step of an olympiad hint (1 direction, 2 idea, 3 pseudocode).
+    hint_level: Mapped[int | None] = mapped_column(SmallInteger)
     model: Mapped[str] = mapped_column(String(100))
     prompt_version: Mapped[str] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
