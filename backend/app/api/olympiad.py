@@ -16,7 +16,7 @@ from sqlalchemy import func, select
 from app.api.content_schemas import StudentTaskOut
 from app.api.deps import CurrentUser, DbSession, RedisClient, client_ip, require_roles
 from app.api.workspace import Code, Judge, Language, _limit_judge, _writable
-from app.core.enums import AssessmentKind, TaskLevel, TraceKind
+from app.core.enums import AssessmentKind, GenAiMode, TaskLevel, TraceKind
 from app.core.roles import Role
 from app.judge.client import JudgeUnavailableError
 from app.llm import gateway
@@ -33,7 +33,7 @@ from app.models import (
 )
 from app.services import audit, olympiad, own_tests
 from app.services.access import is_staff, studies_course
-from app.services.assistant import olympiad_hint
+from app.services.assistant import olympiad_hint, strictest_running_mode
 from app.services.audit import AuditAction
 from app.services.contests import in_running_contest, writing_any_contest
 from app.services.trace import record_server_event
@@ -294,8 +294,12 @@ def ask_hint(task_id: int, body: HintIn, user: CurrentUser, db: DbSession) -> Hi
     if session.task_id != task.id or session.assessment_id is not None:
         raise _forbidden()
     now = datetime.now(UTC)
-    if in_running_contest(db, user.id, task.id, now) or writing_any_contest(db, user.id, now):
-        raise _forbidden("assistant_forbidden")  # ОТ-02: no AI during any round
+    if (
+        in_running_contest(db, user.id, task.id, now)
+        or writing_any_contest(db, user.id, now)
+        or strictest_running_mode(db, user.id, now) == GenAiMode.FORBIDDEN
+    ):
+        raise _forbidden("assistant_forbidden")  # no AI during a round or a no-AI control work
     level, opens_at = olympiad.next_hint(db, user, task, now)
     if level is None:
         raise HTTPException(status.HTTP_409_CONFLICT, detail="no_more_hints")

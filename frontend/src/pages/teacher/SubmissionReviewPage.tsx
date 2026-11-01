@@ -71,6 +71,7 @@ export function SubmissionReviewPage() {
       </section>
       {!grades.loading && <ConfirmGrade key={latest?.id ?? "none"} submissionId={s.id} ai={latest} />}
       <Observations submissionId={s.id} />
+      <ExamplePanel submissionId={s.id} />
     </>
   );
 }
@@ -163,5 +164,58 @@ function GradeView({ grade }: { grade: AiGrade }) {
         {grade.model} · {grade.prompt_version}
       </p>
     </div>
+  );
+}
+
+const CRITERIA = ["understanding", "algorithm", "correctness", "code_quality", "debugging", "explanation"];
+
+/** ФТ-17: after confirming, the teacher keeps this work as an example of a criterion level. */
+function ExamplePanel({ submissionId }: { submissionId: number }) {
+  const { t } = useTranslation();
+  const [criterion, setCriterion] = useState(CRITERIA[0]);
+  const [note, setNote] = useState("");
+  const [saved, setSaved] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
+
+  const add = async () => {
+    setError(null);
+    setSaved(null);
+    try {
+      const example = await apiSend<{ level: string }>("POST", `/api/submissions/${submissionId}/examples`, {
+        criterion_code: criterion,
+        note,
+      });
+      setSaved(example.level);
+    } catch (caught) {
+      setError(caught);
+    }
+  };
+
+  return (
+    <section className="card">
+      <h2>{t("examples.title")}</h2>
+      <p className="muted">{t("examples.help")}</p>
+      <div className="row">
+        <label>
+          {t("monitoring.criterion")}
+          <select value={criterion} onChange={(e) => setCriterion(e.target.value)}>
+            {CRITERIA.map((c) => (
+              <option key={c} value={c}>
+                {t(`review.criteria.${c}`)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          {t("examples.note")}
+          <input maxLength={2000} value={note} onChange={(e) => setNote(e.target.value)} />
+        </label>
+        <button type="button" onClick={add}>
+          {t("examples.add")}
+        </button>
+      </div>
+      {saved && <p role="status">{t("examples.saved", { level: t(`levels.${saved}`) })}</p>}
+      {error !== null && <ErrorText error={error} />}
+    </section>
   );
 }

@@ -25,7 +25,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.core.enums import EntrySource, check_in
+from app.core.enums import EntrySource, GenAiMode, check_in
 from app.db.base import Base
 
 
@@ -140,4 +140,44 @@ class Observation(Base):
     level: Mapped[str | None] = mapped_column(String(4))
     text: Mapped[str] = mapped_column(Text)
     author_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class TaskAssignment(Base):
+    """ФТ-05: a task the teacher gives one student, for personalisation or remediation."""
+
+    __tablename__ = "task_assignments"
+    __table_args__ = (
+        UniqueConstraint("task_id", "user_id"),
+        CheckConstraint(check_in("genai_mode", GenAiMode), name="genai_mode_valid"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    assigned_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    note: Mapped[str] = mapped_column(Text, default="", server_default="")
+    genai_mode: Mapped[str] = mapped_column(
+        String(16), default=GenAiMode.HINTS_ONLY.value, server_default="hints_only"
+    )
+    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class RubricExample(Base):
+    """ФТ-17: a graded work kept as an example of a criterion level for the LLM."""
+
+    __tablename__ = "rubric_examples"
+    __table_args__ = (
+        UniqueConstraint("submission_id", "criterion_code"),
+        CheckConstraint("level IN ('low', 'mid', 'high')", name="level_valid"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    course_id: Mapped[int] = mapped_column(ForeignKey("courses.id", ondelete="CASCADE"), index=True)
+    submission_id: Mapped[int] = mapped_column(ForeignKey("submissions.id", ondelete="CASCADE"))
+    criterion_code: Mapped[str] = mapped_column(String(32))
+    level: Mapped[str] = mapped_column(String(8))
+    note: Mapped[str] = mapped_column(Text, default="", server_default="")
+    added_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

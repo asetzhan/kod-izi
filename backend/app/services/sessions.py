@@ -14,6 +14,7 @@ from app.core.enums import ParticipationKind, TaskStatus, TraceKind
 from app.core.roles import Role
 from app.models import Assessment, AssessmentTask, Task, TraceEvent, User, WorkSession
 from app.services.access import can_edit_course, is_staff, studies_course
+from app.services.assignments import can_work_on_assignment
 from app.services.contests import active_window, in_unfinished_contest, is_contest, join_official
 from app.services.olympiad import can_practice
 from app.services.trace import record_server_event
@@ -30,7 +31,7 @@ def _check_access(db: Session, user: User, task: Task, assessment: Assessment | 
     if assessment is None:
         # Practice outside an assessment: staff checking their tasks, and students on
         # olympiad problems once part 2 is open for them (ОТ-01).
-        if not can_practice(db, user, task):
+        if not (can_practice(db, user, task) or can_work_on_assignment(db, user.id, task)):
             raise SessionError(403, "forbidden")
         return
     if user.has_role(Role.STUDENT) and not is_staff(user):
@@ -117,7 +118,9 @@ def writable_session(db: Session, user: User, session_id: object) -> WorkSession
     if session.assessment_id is None:
         # Practice: the problem may have joined a contest since the session was opened.
         task = db.get(Task, session.task_id)
-        if task is None or not can_practice(db, user, task):
+        if task is None or not (
+            can_practice(db, user, task) or can_work_on_assignment(db, user.id, task)
+        ):
             raise SessionError(403, "forbidden")
     else:
         assessment = db.get(Assessment, session.assessment_id)

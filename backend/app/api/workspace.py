@@ -16,7 +16,14 @@ from sqlalchemy.orm import Session
 
 from app.api.content_schemas import StudentTaskOut
 from app.api.deps import AdminUser, CurrentUser, DbSession, RedisClient, client_ip
-from app.core.enums import GenAiMode, ParticipationKind, SubmissionStatus, TraceKind, Verdict
+from app.core.enums import (
+    ActivityStage,
+    GenAiMode,
+    ParticipationKind,
+    SubmissionStatus,
+    TraceKind,
+    Verdict,
+)
 from app.jobs import get_enqueue
 from app.judge import get_judge
 from app.judge.client import JudgeClient, JudgeUnavailableError, RunStatus
@@ -35,7 +42,10 @@ from app.models import (
 )
 from app.models.course import CourseGroup
 from app.services import audit
-from app.services.access import can_edit_course, is_staff
+from app.services.access import can_edit_course, can_view_user, is_staff
+from app.services.analytics import label_stages
+from app.services.assignments import assignment_for
+from app.services.assistant import MODE_ORDER, strictest_running_mode
 from app.services.audit import AuditAction
 from app.services.contests import (
     active_window,
@@ -143,10 +153,25 @@ def create_session(
         session_id=session.id,
         task=StudentTaskOut.build(task),
         assessment_id=body.assessment_id,
-        genai_mode=GenAiMode(assessment.genai_mode) if assessment else GenAiMode.OPEN,
+        genai_mode=_session_mode(db, user, task, assessment),
         ends_at=assessment.ends_at if assessment else None,
         code=code,
     )
+
+
+def _session_mode(db: Session, user: User, task: Task, assessment: Assessment | None) -> GenAiMode:
+    """What the assistant allows here; the server enforces it again on every request."""
+    if assessment is not None:
+        mode = GenAiMode(assessment.genai_mode)
+    else:
+        assignment = assignment_for(db, user.id, task.id)
+        mode = GenAiMode(assignment.genai_mode) if assignment else GenAiMode.OPEN
+    running = strictest_running_mode(
+        db, user.id, datetime.now(UTC), other_than=assessment.id if assessment else None
+    )
+    if running is not None and MODE_ORDER.index(running) < MODE_ORDER.index(mode):
+        return running
+    return mode
 
 
 class EventBatch(BaseModel):
@@ -418,7 +443,9 @@ def submit(
     session = _writable(db, user, session_id)
     task = _task(db, session.task_id)
     assessment = db.get(Assessment, session.assessment_id) if session.assessment_id else None
-    olympiad = assessment is None or is_contest(assessment)
+    assigned = assessment is None and assignment_for(db, user.id, task.id) is not None
+    # Control works and individual tasks (ФТ-05) ask for an explanation (ФТ-27).
+    olympiad = (assessment is None and not assigned) or is_contest(assessment)
     if not olympiad and not body.explanation.strip():
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail="explanation_required")
     in_flight = db.scalar(
@@ -459,8 +486,13 @@ def submit(
         db.refresh(submission)
         return SubmissionOut.build(submission)
     provider = get_provider()
-    if writing_any_contest(db, user.id, datetime.now(UTC)):
-        # ОТ-02: no LLM call at all while the student writes a round.
+    now = datetime.now(UTC)
+    if writing_any_contest(db, user.id, now) or (
+        strictest_running_mode(db, user.id, now, other_than=session.assessment_id)
+        == GenAiMode.FORBIDDEN
+    ):
+        # No LLM call while the student writes a round or another work without AI: the
+        # code could carry that work's statement to the model.
         questions, source = template_questions(body.code, body.ui_language), "template"
     else:
         try:
@@ -567,6 +599,7 @@ class TraceEventOut(BaseModel):
     server_ts: datetime
     payload: dict[str, Any]
     flagged: bool
+    stage: ActivityStage | None = None  # ФТ-26, computed when the trace is read
 
 
 class SessionTraceOut(BaseModel):
@@ -584,8 +617,15 @@ def get_trace(session_id: uuid.UUID, user: CurrentUser, db: DbSession) -> Sessio
     """ФТ-25: the full trace of a session for the course's teachers (replay in stage 6b)."""
     session = db.get(WorkSession, session_id)
     task = db.get(Task, session.task_id) if session else None
-    if session is None or task is None or not can_edit_course(db, user, task.course_id):
+    if (
+        session is None
+        or task is None
+        or not can_edit_course(db, user, task.course_id)
+        or not can_view_user(db, user, session.user_id)  # only the student's own teachers
+    ):
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="forbidden")
+    events = session_events(db, session.id)
+    stages = label_stages(events)
     return SessionTraceOut(
         session_id=session.id,
         user_id=session.user_id,
@@ -602,8 +642,9 @@ def get_trace(session_id: uuid.UUID, user: CurrentUser, db: DbSession) -> Sessio
                 server_ts=e.server_ts,
                 payload=e.payload,
                 flagged=e.flagged,
+                stage=stage,
             )
-            for e in session_events(db, session.id)
+            for e, stage in zip(events, stages, strict=True)
         ],
     )
 

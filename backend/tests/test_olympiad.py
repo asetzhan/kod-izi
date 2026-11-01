@@ -704,3 +704,22 @@ def test_ot03_virtual_round_accepts_trace_events(client: TestClient, oly: dict[s
         f"/api/sessions/{sid}/events", headers=oly["a"], json={"events": [event]}
     )
     assert response.status_code == 200, response.text
+
+
+def test_ot01_problems_of_upcoming_control_works_stay_out_of_practice(
+    client: TestClient, oly: dict[str, Any], db: Session
+) -> None:
+    begin = datetime.now(UTC) + timedelta(hours=1)
+    work = Assessment(
+        course_id=oly["course"]["id"],
+        title="Later",
+        starts_at=begin,
+        ends_at=begin + timedelta(hours=1),
+    )
+    db.add(work)
+    db.flush()
+    db.add(AssessmentTask(assessment_id=work.id, task_id=oly["tasks"][2]))
+    db.flush()
+    assert _session(client, oly["a"], oly["tasks"][2]).status_code == 403
+    ids = [p["id"] for p in client.get("/api/olympiad/problems", headers=oly["a"]).json()]
+    assert oly["tasks"][2] not in ids

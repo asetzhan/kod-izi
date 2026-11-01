@@ -8,12 +8,22 @@ hints_only mode an answer that contains ready code is withheld.
 import re
 from datetime import UTC, datetime
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.enums import CoursePart, GenAiMode, TraceKind
 from app.llm import gateway
 from app.llm.base import LLMProvider, LLMRequest
-from app.models import AiMessage, Assessment, Course, Task, WorkSession
+from app.models import (
+    AiMessage,
+    Assessment,
+    Course,
+    CourseGroup,
+    GroupMember,
+    Task,
+    WorkSession,
+)
+from app.services.assignments import assignment_for
 from app.services.contests import writing_any_contest
 from app.services.materials import find_fragments, fragments_block
 from app.services.trace import record_server_event
@@ -60,6 +70,34 @@ def looks_like_code(text: str) -> bool:
 
 class AssistantForbiddenError(Exception):
     pass
+
+
+MODE_ORDER = [GenAiMode.FORBIDDEN, GenAiMode.HINTS_ONLY, GenAiMode.OPEN]
+
+
+def strictest_running_mode(
+    db: Session, user_id: int, now: datetime, other_than: int | None = None
+) -> GenAiMode | None:
+    """The strictest AI mode among the control works of the student's courses running now.
+
+    Outside such a work (practice, an individual task) the assistant may not be more open
+    than the work allows; otherwise its statement could be asked about elsewhere."""
+    my_courses = (
+        select(CourseGroup.course_id)
+        .join(GroupMember, GroupMember.group_id == CourseGroup.group_id)
+        .where(GroupMember.user_id == user_id)
+    )
+    modes = db.scalars(
+        select(Assessment.genai_mode).where(
+            Assessment.course_id.in_(my_courses),
+            Assessment.starts_at <= now,
+            Assessment.ends_at >= now,
+            *([Assessment.id != other_than] if other_than is not None else []),
+        )
+    ).all()
+    if not modes:
+        return None
+    return min((GenAiMode(m) for m in modes), key=MODE_ORDER.index)
 
 
 def _is_part2(db: Session, task: Task) -> bool:
@@ -156,16 +194,25 @@ def ask(
     assessment = db.get(Assessment, session.assessment_id) if session.assessment_id else None
     if task is None:
         raise ValueError("session without task")
+    assignment = assignment_for(db, session.user_id, task.id) if assessment is None else None
     if assessment is not None:
         mode = GenAiMode(assessment.genai_mode)
+    elif assignment is not None:
+        mode = GenAiMode(assignment.genai_mode)  # ФТ-05: the teacher chose the mode
     elif _is_part2(db, task):
         # ОТ-05: olympiad practice gets only the step-by-step hints (olympiad_hint), so
         # the order direction → idea → pseudocode cannot be skipped through free questions.
         raise AssistantForbiddenError()
     else:
         mode = GenAiMode.OPEN
-    if mode == GenAiMode.FORBIDDEN or writing_any_contest(db, session.user_id, datetime.now(UTC)):
+    now = datetime.now(UTC)
+    if writing_any_contest(db, session.user_id, now):
         raise AssistantForbiddenError()  # ОТ-02: no AI at all while the student writes a round
+    running = strictest_running_mode(db, session.user_id, now, other_than=session.assessment_id)
+    if running is not None and MODE_ORDER.index(running) < MODE_ORDER.index(mode):
+        mode = running  # a running control work limits the assistant everywhere else
+    if mode == GenAiMode.FORBIDDEN:
+        raise AssistantForbiddenError()
     gateway.ensure_quota(db, session.user_id)  # before any model work, embeddings included
     code = code[:CODE_LIMIT]
 

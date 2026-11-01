@@ -92,6 +92,17 @@ class TraceKind(StrEnum):
     AI_RESPONSE = "ai_response"
 
 
+class ActivityStage(StrEnum):
+    """Stages of the programming activity (glossary; ФТ-26)."""
+
+    UNDERSTAND = "understand"
+    PLAN = "plan"
+    CODE = "code"
+    TEST = "test"
+    DEBUG = "debug"
+    EXPLAIN = "explain"
+
+
 class MaterialKind(StrEnum):
     BOOK = "book"
     LECTURE = "lecture"

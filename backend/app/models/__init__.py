@@ -34,6 +34,8 @@ from app.models.panel import (
     ComponentEntryVersion,
     ComponentSetting,
     Observation,
+    RubricExample,
+    TaskAssignment,
     TeacherGrade,
 )
 from app.models.setting import AppSetting
@@ -69,10 +71,12 @@ __all__ = [
     "RefreshToken",
     "Rubric",
     "RubricCriterion",
+    "RubricExample",
     "StudentTest",
     "Submission",
     "SubmissionTestResult",
     "Task",
+    "TaskAssignment",
     "TaskKnowledgeComponent",
     "TeacherGrade",
     "TestCase",

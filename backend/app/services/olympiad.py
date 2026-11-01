@@ -28,7 +28,7 @@ from app.models import (
     WorkSession,
 )
 from app.services.access import can_edit_course, is_staff
-from app.services.contests import in_running_contest, in_unfinished_contest
+from app.services.contests import in_running_contest, in_unfinished_assessment
 from app.services.results import mastery
 
 OLYMPIAD_KEY = "olympiad"
@@ -112,7 +112,7 @@ def can_practice(db: Session, user: User, task: Task, now: datetime | None = Non
         and task.in_bank
         and course in part2_courses(db, user)
         and bool(unlock_state(db, user)["unlocked"])
-        and not in_unfinished_contest(db, task.id, now)
+        and not in_unfinished_assessment(db, task.id, now)
         and not in_running_contest(db, user.id, task.id, now)
     )
 
@@ -166,7 +166,7 @@ def bank(db: Session, user: User) -> list[Task]:
         t
         for t in tasks
         if t.in_bank
-        and not in_unfinished_contest(db, t.id, now)
+        and not in_unfinished_assessment(db, t.id, now)
         and not in_running_contest(db, user.id, t.id, now)
     ]
 
