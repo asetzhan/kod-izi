@@ -51,7 +51,7 @@ from app.models import Group, GroupMember, GroupTeacher, User  # noqa: E402
 from app.services.seed_content import SeedReport, seed_all  # noqa: E402
 
 # Stage 2 fixtures `judge` and `ws` live in tests/workspace_helpers.py.
-pytest_plugins = ["tests.workspace_helpers"]
+pytest_plugins = ["tests.workspace_helpers", "tests.olympiad_helpers"]
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 PASSWORD = "correct-horse-battery-staple"

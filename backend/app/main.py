@@ -14,6 +14,7 @@ from app.api import (
     olympiad,
     panel,
     privacy,
+    review,
     tasks,
     users,
     workspace,
@@ -46,6 +47,7 @@ def create_app() -> FastAPI:
         olympiad,
         insights,
         learning,
+        review,
     ):
         app.include_router(module.router)
     return app

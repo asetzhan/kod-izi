@@ -15,9 +15,13 @@ from app.db.context import set_system
 from app.db.session import get_sessionmaker
 from app.judge import get_judge
 from app.judge.judge0 import MAX_WALL_TIME_S
+from app.llm.ollama import LLMUnavailableError
 from app.llm.registry import get_provider
-from app.models import MaterialVersion, SimilarityReport, Submission
+from app.models import ExternalAccount, MaterialVersion, SimilarityReport, Submission
+from app.services import ai_grading
 from app.services.antivirus import ClamdScanner
+from app.services.component_fill import fill_submission
+from app.services.external import HttpCodeforces, RedisRateLimiter, sync_codeforces
 from app.services.materials import process_version
 from app.services.pipeline import run_pipeline
 from app.services.similarity import run_report
@@ -138,3 +142,53 @@ def enqueue_similarity(report_id: int) -> None:
 def get_similarity_enqueue() -> Callable[[int], None]:
     """FastAPI dependency; tests replace it with inline processing."""
     return enqueue_similarity
+
+
+def explain_grade_job(submission_id: int) -> None:
+    """ОТ-07: the AI grade of an explained contest solution; the teacher then confirms it."""
+    with get_sessionmaker()() as db:
+        set_system(db)
+        submission = db.get(Submission, submission_id)
+        if submission is None or submission.explanation is None:
+            return
+        try:
+            grade = ai_grading.grade(db, get_provider(), submission)
+        except LLMUnavailableError:
+            return  # the teacher can request the AI grade again from the review page
+        fill_submission(db, submission, grade)
+        db.commit()
+
+
+def enqueue_explain_grade(submission_id: int) -> None:
+    _queue().enqueue(explain_grade_job, submission_id, job_timeout=600)
+
+
+def get_explain_enqueue() -> Callable[[int], None]:
+    """FastAPI dependency; tests replace it with inline grading."""
+    return enqueue_explain_grade
+
+
+def sync_external_job(account_id: int) -> None:
+    """ОТ-08: runs in the `connector` worker, the only one with internet access (Q-18)."""
+    with get_sessionmaker()() as db:
+        set_system(db)
+        account = db.get(ExternalAccount, account_id)
+        if account is None:
+            return
+        limiter = RedisRateLimiter(Redis.from_url(get_settings().redis_url))
+        sync_codeforces(db, account, HttpCodeforces(limiter))
+        db.commit()
+
+
+@lru_cache
+def _external_queue() -> Queue:
+    return Queue("external", connection=Redis.from_url(get_settings().redis_url))
+
+
+def enqueue_external_sync(account_id: int) -> None:
+    _external_queue().enqueue(sync_external_job, account_id, job_timeout=300)
+
+
+def get_external_enqueue() -> Callable[[int], None]:
+    """FastAPI dependency; tests replace it with a fake sync."""
+    return enqueue_external_sync

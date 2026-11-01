@@ -5,6 +5,7 @@ from typing import Any
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -13,6 +14,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    false,
     func,
     text,
 )
@@ -93,3 +95,80 @@ class SimilarityReport(Base):
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ExternalAccount(Base):
+    """ОТ-08: a student's account on an external platform (Codeforces), linked with their
+    own consent (Q-18). Only the handle leaves the system."""
+
+    __tablename__ = "external_accounts"
+    __table_args__ = (UniqueConstraint("user_id", "platform"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    platform: Mapped[str] = mapped_column(String(16))
+    handle: Mapped[str] = mapped_column(String(64))
+    consent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    rating: Mapped[int | None] = mapped_column(Integer)
+    max_rating: Mapped[int | None] = mapped_column(Integer)
+    sync_status: Mapped[str] = mapped_column(String(16), default="pending")
+    sync_error: Mapped[str | None] = mapped_column(Text)
+    last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ExternalSolve(Base):
+    """ОТ-08: a problem solved on an external platform, gathered from its API or marked by
+    the student with a link (then a coach may verify it)."""
+
+    __tablename__ = "external_solves"
+    __table_args__ = (
+        UniqueConstraint("user_id", "platform", "problem_key"),
+        CheckConstraint("source IN ('api', 'manual')", name="source_valid"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    platform: Mapped[str] = mapped_column(String(16))
+    problem_key: Mapped[str] = mapped_column(String(100))
+    title: Mapped[str] = mapped_column(String(300), default="")
+    url: Mapped[str] = mapped_column(String(500))
+    rating: Mapped[int | None] = mapped_column(Integer)
+    tags: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default=text("'[]'::jsonb"))
+    solved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    source: Mapped[str] = mapped_column(String(8))
+    verified_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class RatingPoint(Base):
+    """ОТ-09: the student's rating after each rated contest on an external platform."""
+
+    __tablename__ = "rating_points"
+    __table_args__ = (UniqueConstraint("user_id", "platform", "at"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    platform: Mapped[str] = mapped_column(String(16))
+    contest: Mapped[str] = mapped_column(String(300), default="")
+    rating: Mapped[int] = mapped_column(Integer)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class ContestAnalysis(Base):
+    """ОТ-07: the AI's analysis (editorial) of a contest problem, shown after the contest
+    once a coach publishes it; marked as AI-written."""
+
+    __tablename__ = "contest_analyses"
+    __table_args__ = (UniqueConstraint("assessment_id", "task_id"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    assessment_id: Mapped[int] = mapped_column(
+        ForeignKey("assessments.id", ondelete="CASCADE"), index=True
+    )
+    task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"))
+    editorial_md: Mapped[str] = mapped_column(Text)
+    model: Mapped[str] = mapped_column(String(100))
+    prompt_version: Mapped[str] = mapped_column(String(64))
+    published: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
