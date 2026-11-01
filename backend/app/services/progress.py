@@ -20,9 +20,9 @@ from app.models import (
     TeacherGrade,
     Topic,
 )
-from app.services.bkt import student_model
 from app.services.contests import in_unfinished_assessment
 from app.services.results import mastery
+from app.services.student_model import student_model
 
 LEVEL_SCORE = {"low": 0, "mid": 1, "high": 2}
 LEVELS = [level.value for level in TaskLevel]
@@ -66,7 +66,7 @@ def _target_level(rows: list[dict[str, Any]], topic_id: int) -> str:
 
 
 def next_step(db: Session, course_id: int, user_id: int, limit: int = 5) -> dict[str, Any]:
-    model = student_model(db, course_id, user_id)
+    engine, model = student_model(db, course_id, user_id)
     weak = sorted(
         (m for m in model if not m["mastered"]), key=lambda m: (m["p_learned"], m["kc_id"])
     )
@@ -112,6 +112,7 @@ def next_step(db: Session, course_id: int, user_id: int, limit: int = 5) -> dict
         if topic is not None:
             lessons = [{"title": lesson.title, "url": lesson.url} for lesson in topic.lessons]
     return {
+        "engine": engine,
         "weakest_criterion": criterion,
         "weak_components": [
             {k: m[k] for k in ("kc_id", "code", "name", "topic_code", "p_learned")}
@@ -147,8 +148,9 @@ def trajectory(db: Session, course_id: int, user_id: int) -> dict[str, Any]:
             }
         )
     course = db.get(Course, course_id)
-    model = student_model(db, course_id, user_id)
+    engine, model = student_model(db, course_id, user_id)
     return {
+        "engine": engine,
         "course": course.title if course else "",
         "results": points,
         "mastery": mastery(db, course_id, user_id),

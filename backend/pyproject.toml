@@ -33,6 +33,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# ФТ-40 Code-DKT (Q-19): CPU wheels from https://download.pytorch.org/whl/cpu
+ml = ["torch==2.14.1"]
 dev = [
     "pytest==9.2.0",
     "fakeredis==2.40.0",
@@ -66,7 +68,7 @@ plugins = ["pydantic.mypy"]
 exclude = ["migrations/"]
 
 [[tool.mypy.overrides]]
-module = ["fakeredis.*", "rq.*", "defusedxml.*", "pgvector.*", "pptx.*", "lizard.*", "docx.*", "openpyxl.*"]
+module = ["fakeredis.*", "rq.*", "defusedxml.*", "pgvector.*", "pptx.*", "lizard.*", "docx.*", "openpyxl.*", "torch.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

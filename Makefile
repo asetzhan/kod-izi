@@ -2,7 +2,7 @@ COMPOSE := docker compose -f infra/docker-compose.yml --env-file .env
 BACKEND := $(COMPOSE) run --rm backend
 FRONTEND := $(COMPOSE) run --rm --no-deps frontend
 
-.PHONY: help env dev down logs migrate seed create-admin test test-backend test-frontend lint llm backup retention
+.PHONY: help env dev down logs migrate seed create-admin test test-backend test-frontend lint llm backup retention train-dkt
 
 help:
 	@echo "make dev           - start all services (http://localhost:$${HTTP_PORT:-8080})"
@@ -16,6 +16,7 @@ help:
 	@echo "make llm           - start the local LLM (Ollama) and download its models"
 	@echo "make backup        - make an encrypted backup now"
 	@echo "make retention     - anonymize data past the retention period (spec 14.3)"
+	@echo "make train-dkt COURSE=N - train Code-DKT for a course, compare with BKT (ФТ-40)"
 
 env:
 	@sh infra/scripts/init-env.sh
@@ -51,6 +52,10 @@ backup: env
 
 retention: env
 	$(BACKEND) python -m app.cli retention
+
+# ФТ-40 (Q-19): PyTorch CPU is installed into the backend container on demand.
+train-dkt: env
+	$(BACKEND) sh -c 'pip install -q -e ".[ml]" --extra-index-url https://download.pytorch.org/whl/cpu && python -m app.cli train-dkt --course-id $(COURSE) --report /app/models/code-dkt-report.md'
 
 test: test-backend test-frontend
 

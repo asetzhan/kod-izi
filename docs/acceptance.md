@@ -23,3 +23,13 @@
 | Стресс-тест айырмашылық табылған кірісті көрсетеді | `test_ot06_stress_test_shows_the_differing_input` | Нақты Judge0-мен тексеру (Q-15) |
 | Есептер банкі, жад шектеуі 16–1024 МБ (ОТ-01) | `test_ot01_bank_fields_and_memory_limits`, `test_ot01_seeded_olympiad_bank_is_a_draft`, `test_ot01_part2_opens_when_topics_are_mastered` | Жаттықтырушы банктің жобасын (Q-13) тексеріп бекітеді |
 | Деңгейге сай ұсыныс (ОТ-04), анықтамалық (ОТ-10) | `test_ot04_recommendations_are_slightly_above_the_rating`, `test_ot10_reference_lists_lessons_and_materials` | — |
+
+## 7-кезең
+
+| Қабылдау критерийі (`docs/prompts/stage-7-advanced.md`) | Автоматты тексеру | Қолмен не қалды |
+| --- | --- | --- |
+| Code-DKT: оқыту мен бағалау, BKT-мен салыстыру, модель болмаса немесе нашар болса BKT-ға қайту (ФТ-40) | `test_code_dkt.py::test_ft40_code_dkt_trains_and_beats_bkt_on_test_data`, `test_ft40_falls_back_to_bkt_without_a_good_real_model`, `test_ft40_progress_uses_bkt_when_no_model_and_says_so`; есеп: `docs/reports/code-dkt-vs-bkt.md` | Пилот деректерімен оқыту: `make train-dkt COURSE=N` |
+| Жарыстан кейінгі талдау, қайта шешу тізімі, қос бағалау (ОТ-07) | `test_review.py::test_ot07_*` | — |
+| Codeforces API лимитке сай, қате кезінде жүйе тоқтамайды (ОТ-08) | `test_ot08_requests_keep_to_the_codeforces_limit`, `test_ot08_api_errors_do_not_stop_the_system`, `test_ot08_a_handle_is_verified_for_one_student_only` | Нақты Codeforces-пен connector арқылы тексеру (сервер дайын болғанда) |
+| Білім картасы (ОТ-09) | `test_ot09_knowledge_map_by_topic_and_rating_over_time` | — |
+| Авторлық куәлікке арналған техникалық сипаттама | `docs/authorship/technical-description.md` | Өтініш берушінің деректерін толтыру |
