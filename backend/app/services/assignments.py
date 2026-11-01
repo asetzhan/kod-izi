@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 
 from app.core.enums import TaskStatus
 from app.models import Task, TaskAssignment
-from app.services.contests import in_unfinished_contest
+from app.services.access import studies_course
+from app.services.contests import in_unfinished_assessment
 
 
 def assignment_for(db: Session, user_id: int, task_id: int) -> TaskAssignment | None:
@@ -19,9 +20,11 @@ def assignment_for(db: Session, user_id: int, task_id: int) -> TaskAssignment | 
 
 
 def can_work_on_assignment(db: Session, user_id: int, task: Task) -> bool:
-    """An approved task given to this student; never a problem of an unfinished contest."""
+    """An approved task given to this student of the course; never a task of a control work
+    or contest that has not ended (no early, penalty-free look at it)."""
     return (
         task.status == TaskStatus.APPROVED.value
         and assignment_for(db, user_id, task.id) is not None
-        and not in_unfinished_contest(db, task.id, datetime.now(UTC))
+        and studies_course(db, user_id, task.course_id)
+        and not in_unfinished_assessment(db, task.id, datetime.now(UTC))
     )

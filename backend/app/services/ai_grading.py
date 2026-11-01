@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from app.core.enums import AiGradeStatus, Verdict
 from app.llm import gateway
 from app.llm.base import LLMProvider, LLMRequest
-from app.models import AiGrade, AiMessage, Assessment, RubricExample, Submission, Task
+from app.models import AiGrade, AiMessage, Assessment, RubricExample, Submission, Task, User
 from app.services.analytics import process_report, work_events
 from app.services.materials import Fragment, find_fragments, fragments_block
 from app.services.rubrics import final_score, get_or_create_rubric, rubric_block, weights
@@ -64,6 +64,7 @@ graded_examples блогында оқытушы бағалаған жұмыст�
 EXAMPLES_VERSION = "+examples"
 EXAMPLES_PER_LEVEL = 2
 EXAMPLE_CODE_LIMIT = 1500
+EXAMPLES_TOTAL_LIMIT = 8000  # keep the prompt well inside the local model's context
 
 LANGUAGE_NAMES = {"kk": "қазақ", "ru": "орыс"}
 
@@ -169,30 +170,35 @@ def genai_log(db: Session, submission: Submission) -> dict[str, Any]:
 
 def graded_examples(db: Session, course_id: int, exclude_submission: int) -> list[dict[str, Any]]:
     """ФТ-17: the latest examples per criterion and level; code only, never the student."""
-    rows = db.scalars(
-        select(RubricExample)
+    rows = db.execute(
+        select(RubricExample, Submission)
+        .join(Submission, Submission.id == RubricExample.submission_id)
+        .join(User, User.id == Submission.user_id)
         .where(
             RubricExample.course_id == course_id,
             RubricExample.submission_id != exclude_submission,
+            # Spec 14.3: nothing of a student who withdrew consent or was anonymized.
+            User.consent_withdrawn_at.is_(None),
+            User.anonymized_at.is_(None),
         )
         .order_by(RubricExample.id.desc())
     ).all()
     kept: dict[tuple[str, str], int] = {}
     out = []
-    for row in rows:
+    total = 0
+    for row, submission in rows:
         key = (row.criterion_code, row.level)
-        if kept.get(key, 0) >= EXAMPLES_PER_LEVEL:
-            continue
-        submission = db.get(Submission, row.submission_id)
-        if submission is None:
+        code = submission.code[:EXAMPLE_CODE_LIMIT]
+        if kept.get(key, 0) >= EXAMPLES_PER_LEVEL or total + len(code) > EXAMPLES_TOTAL_LIMIT:
             continue
         kept[key] = kept.get(key, 0) + 1
+        total += len(code)
         out.append(
             {
                 "criterion": row.criterion_code,
                 "level": row.level,
                 "teacher_note": row.note,
-                "code": submission.code[:EXAMPLE_CODE_LIMIT],
+                "code": code,
             }
         )
     return out
@@ -356,7 +362,7 @@ def grade(
         return record
 
     flags = list(answer.flags)
-    untrusted = {
+    untrusted: dict[str, str] = {
         k: request.data_blocks[k]
         for k in (
             "student_code",
@@ -364,7 +370,9 @@ def grade(
             "genai_log",
             "book_fragments",
             "static_analysis",
+            "graded_examples",
         )
+        if k in request.data_blocks
     }
     injected = find_injection(untrusted)
     if injected or "possible_injection" in flags:

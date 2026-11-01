@@ -42,7 +42,7 @@ from app.models import (
 )
 from app.models.course import CourseGroup
 from app.services import audit
-from app.services.access import can_edit_course, is_staff
+from app.services.access import can_edit_course, can_view_user, is_staff
 from app.services.analytics import label_stages
 from app.services.assignments import assignment_for
 from app.services.audit import AuditAction
@@ -604,7 +604,12 @@ def get_trace(session_id: uuid.UUID, user: CurrentUser, db: DbSession) -> Sessio
     """ФТ-25: the full trace of a session for the course's teachers (replay in stage 6b)."""
     session = db.get(WorkSession, session_id)
     task = db.get(Task, session.task_id) if session else None
-    if session is None or task is None or not can_edit_course(db, user, task.course_id):
+    if (
+        session is None
+        or task is None
+        or not can_edit_course(db, user, task.course_id)
+        or not can_view_user(db, user, session.user_id)  # only the student's own teachers
+    ):
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="forbidden")
     events = session_events(db, session.id)
     stages = label_stages(events)

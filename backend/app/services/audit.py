@@ -51,6 +51,9 @@ class AuditAction(StrEnum):
     VIRTUAL_CONTEST_STARTED = "virtual_contest_started"
     OLYMPIAD_SETTINGS_CHANGED = "olympiad_settings_changed"
     TASK_ASSIGNED = "task_assigned"
+    TASK_UNASSIGNED = "task_unassigned"
+    RUBRIC_EXAMPLE_ADDED = "rubric_example_added"
+    RUBRIC_EXAMPLE_REMOVED = "rubric_example_removed"
 
 
 def record(

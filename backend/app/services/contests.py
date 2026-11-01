@@ -139,6 +139,19 @@ def in_unfinished_contest(db: Session, task_id: int, now: datetime) -> bool:
     )
 
 
+def in_unfinished_assessment(db: Session, task_id: int, now: datetime) -> bool:
+    """The task is in a control work or contest that has not ended (upcoming or running)."""
+    return (
+        db.scalar(
+            select(Assessment.id)
+            .join(AssessmentTask, AssessmentTask.assessment_id == Assessment.id)
+            .where(AssessmentTask.task_id == task_id, Assessment.ends_at > now)
+            .limit(1)
+        )
+        is not None
+    )
+
+
 def in_running_contest(db: Session, user_id: int, task_id: int, now: datetime) -> bool:
     """ОТ-02: while the user writes a contest with this problem, the AI stays off for it
     everywhere, practice included."""
