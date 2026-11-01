@@ -2,15 +2,23 @@
 
 Runs in the separate `extractor` worker, which has no internet and no access to the
 application's web tier (spec 14.1: text is extracted in an isolated processor).
-OCR of scanned books is stage 6b (ФТ-37).
+Scanned PDF pages, which have no text layer, are recognised with Tesseract in Kazakh and
+Russian (ФТ-37).
 """
 
 import io
 import posixpath
 import re
+import resource
+import shutil
+import subprocess  # nosec B404
+import tempfile
+import time
 import zipfile
+from collections.abc import Callable
 from dataclasses import dataclass
 from html.parser import HTMLParser
+from pathlib import Path
 
 from defusedxml import ElementTree
 
@@ -19,6 +27,17 @@ MAX_UNPACKED = 100 * 1024 * 1024  # DOCX, PPTX, EPUB after unpacking
 MAX_MEMBER = 20 * 1024 * 1024  # one EPUB chapter
 CHUNK_CHARS = 1200
 CHUNK_OVERLAP = 150
+# A PDF page with less text than this is treated as a scan (ФТ-37).
+MIN_PAGE_TEXT = 20
+OCR_LANGUAGES = "kaz+rus"
+OCR_MAX_PIXELS = 3000  # longest side of a rendered page: a huge page cannot exhaust memory
+OCR_TIMEOUT_S = 60  # per tool and page
+OCR_BUDGET_S = 420  # all OCR of one book: stays inside the 600 s material job
+OCR_MAX_PAGES = 200
+OCR_MEMORY = 1024**3
+
+# pdf bytes, 1-based page numbers → recognised text per page
+Ocr = Callable[[bytes, list[int]], dict[int, str]]
 
 
 class ExtractError(ValueError):
@@ -85,7 +104,67 @@ def detect_type(filename: str, data: bytes) -> str:
 # Extraction ----------------------------------------------------------------------------
 
 
-def extract_pdf(data: bytes) -> list[Page]:
+def _ocr_limits() -> None:
+    """Memory and CPU limits of the poppler and tesseract processes."""
+    resource.setrlimit(resource.RLIMIT_AS, (OCR_MEMORY, OCR_MEMORY))
+    resource.setrlimit(resource.RLIMIT_CPU, (OCR_TIMEOUT_S, OCR_TIMEOUT_S))
+
+
+def tesseract_ocr(data: bytes, numbers: list[int]) -> dict[int, str]:
+    """Render each page with poppler and recognise it with Tesseract (kaz+rus). Missing
+    tools, a failed page or the spent time budget give no text for the remaining pages
+    instead of failing the book."""
+    out: dict[int, str] = {}
+    deadline = time.monotonic() + OCR_BUDGET_S
+    pdftoppm, tesseract = shutil.which("pdftoppm"), shutil.which("tesseract")
+    if pdftoppm is None or tesseract is None:
+        return out
+    with tempfile.TemporaryDirectory() as tmp:
+        pdf = Path(tmp) / "book.pdf"
+        pdf.write_bytes(data)
+        for number in numbers:
+            if time.monotonic() > deadline:
+                break
+            image = Path(tmp) / f"page{number}"
+            try:
+                subprocess.run(  # noqa: S603  # nosec B603
+                    [
+                        pdftoppm,
+                        "-f",
+                        str(number),
+                        "-l",
+                        str(number),
+                        "-scale-to",
+                        str(OCR_MAX_PIXELS),
+                        "-gray",
+                        "-png",
+                        "-singlefile",
+                        str(pdf),
+                        str(image),
+                    ],
+                    check=True,
+                    capture_output=True,
+                    timeout=OCR_TIMEOUT_S,
+                    preexec_fn=_ocr_limits,  # nosec B602
+                )
+                result = subprocess.run(  # noqa: S603  # nosec B603
+                    [tesseract, f"{image}.png", "stdout", "-l", OCR_LANGUAGES],
+                    check=True,
+                    capture_output=True,
+                    timeout=OCR_TIMEOUT_S,
+                    preexec_fn=_ocr_limits,  # nosec B602
+                )
+            except (OSError, subprocess.SubprocessError):
+                continue
+            finally:
+                Path(f"{image}.png").unlink(missing_ok=True)  # do not keep page images
+            out[number] = result.stdout.decode("utf-8", errors="replace")
+    return out
+
+
+def extract_pdf(
+    data: bytes, ocr: Ocr | None = None, max_ocr_pages: int = OCR_MAX_PAGES
+) -> list[Page]:
     from pypdf import PdfReader
     from pypdf.errors import PdfReadError
 
@@ -99,6 +178,12 @@ def extract_pdf(data: bytes) -> list[Page]:
         for number, page in enumerate(reader.pages, start=1):
             chapter = chapters.get(number, chapter)
             pages.append(Page(chapter, number, page.extract_text() or ""))
+        scanned = [p.page for p in pages if p.page and len(p.text.strip()) < MIN_PAGE_TEXT]
+        if ocr is not None and scanned:
+            texts = ocr(data, scanned[:max_ocr_pages])
+            pages = [
+                Page(p.chapter, p.page, texts[p.page]) if p.page in texts else p for p in pages
+            ]
         return pages
     except PdfReadError as exc:
         raise ExtractError(f"bad_pdf: {exc}") from None
@@ -221,8 +306,10 @@ EXTRACTORS = {
 }
 
 
-def extract(mime: str, data: bytes) -> list[Page]:
+def extract(mime: str, data: bytes, ocr: Ocr | None = None) -> list[Page]:
     try:
+        if mime == "application/pdf":
+            return extract_pdf(data, ocr)
         return EXTRACTORS[mime](data)
     except ExtractError:
         raise

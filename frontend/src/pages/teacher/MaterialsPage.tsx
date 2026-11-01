@@ -1,6 +1,6 @@
 import { type FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useParams } from "react-router";
+import { Link, useParams } from "react-router";
 
 import { apiSend, apiUpload } from "../../api/client";
 import type { Binding, Course, Material, MaterialKind, TaskSummary } from "../../api/types";
@@ -36,6 +36,7 @@ export function MaterialsPage() {
               ))}
             </ul>
             {m.versions.some((v) => v.status === "ready") && <DownloadButton materialId={m.id} />}
+            {m.kind === "problems" && <ExtractProblems material={m} />}
             <BindingForm material={m} course={course.data} tasks={tasks.data ?? []} />
           </article>
         ))}
@@ -234,5 +235,57 @@ function DownloadButton({ materialId }: { materialId: number }) {
       </button>
       {error !== null && <ErrorText error={error} />}
     </>
+  );
+}
+
+/** ФТ-23: the LLM takes problems out of the collection, batch by batch, as drafts. */
+function ExtractProblems({ material }: { material: Material }) {
+  const { t } = useTranslation();
+  const version = material.versions.find((v) => v.status === "ready");
+  const [created, setCreated] = useState<{ id: number; title: string }[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  if (!version) return null;
+
+  const run = async () => {
+    setBusy(true);
+    setError(null);
+    setCreated([]);
+    try {
+      let offset = 0;
+      for (;;) {
+        const batch = await apiSend<{
+          tasks: { id: number; title: string }[];
+          next_offset: number;
+          done: boolean;
+        }>("POST", `/api/materials/${material.id}/extract-problems`, { version_id: version.id, offset });
+        setCreated((prev) => [...prev, ...batch.tasks]);
+        if (batch.done) break;
+        offset = batch.next_offset;
+      }
+      setDone(true);
+    } catch (caught) {
+      setError(caught);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div>
+      <button type="button" disabled={busy} onClick={run}>
+        {busy ? t("generate.running") : t("materials.extract")}
+      </button>
+      {done && <p role="status">{t("materials.extracted", { n: created.length })}</p>}
+      <ul>
+        {created.map((task) => (
+          <li key={task.id}>
+            <Link to={`/teacher/tasks/${task.id}`}>{task.title}</Link>
+          </li>
+        ))}
+      </ul>
+      {error !== null && <ErrorText error={error} />}
+    </div>
   );
 }

@@ -79,7 +79,9 @@ services:
     networks: [edge]
 
   backend:
-    build: ../backend
+    build:
+      context: ../backend
+      target: app
     environment: *backend-env
     volumes:
       - ../backend:/app
@@ -105,7 +107,9 @@ services:
       start_period: 20s
 
   worker:
-    build: ../backend
+    build:
+      context: ../backend
+      target: app
     environment: *backend-env
     volumes:
       - ../backend:/app
@@ -122,7 +126,9 @@ services:
   # Isolated processor for uploaded files (spec 14.1): antivirus, text extraction,
   # embeddings. No internet, no web tier, no Judge0.
   extractor:
-    build: ../backend
+    build:
+      context: ../backend
+      target: app
     # Only what text extraction needs: no Judge0 token, no real JWT secret.
     environment:
       APP_ENV: ${APP_ENV:-dev}
@@ -141,6 +147,30 @@ services:
       - ../backend:/app
       - materials:/data/materials
     networks: [data, scan, llm]
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # Code similarity (ФТ-30): JPlag only parses the code, never runs it. Its own container,
+  # no internet (only the internal `data` network), limited memory and processes.
+  analyzer:
+    build:
+      context: ../backend
+      target: analyzer
+    environment:
+      APP_ENV: ${APP_ENV:-dev}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      JWT_SECRET: analyzer-does-not-issue-tokens-00000000000
+      JPLAG_JAR: /opt/jplag/jplag.jar
+    mem_limit: 2g
+    pids_limit: 256
+    cpus: 2
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    networks: [data]
     depends_on:
       redis:
         condition: service_healthy

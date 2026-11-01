@@ -49,11 +49,15 @@ export function StudentHomePage() {
 }
 
 function StudentCourse({ id }: { id: number }) {
+  const { t } = useTranslation();
   const course = useResource<Course>(`/api/courses/${id}`);
   if (!course.data) return <Status loading={course.loading} error={course.error} />;
   return (
     <section className="card">
       <h2>{course.data.title}</h2>
+      <p>
+        <Link to={`/student/progress/${id}`}>{t("progress.open")}</Link>
+      </p>
       <TopicList topics={course.data.topics} />
     </section>
   );

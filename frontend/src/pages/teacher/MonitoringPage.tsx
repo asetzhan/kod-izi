@@ -1,6 +1,6 @@
 import { type FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useParams } from "react-router";
+import { Link, useParams } from "react-router";
 
 import { apiSend } from "../../api/client";
 import type { GenAiMode, TaskSummary } from "../../api/types";
@@ -116,7 +116,9 @@ export function MonitoringPage() {
               <tbody>
                 {board.data.students.map((s) => (
                   <tr key={s.user_id}>
-                    <td>{s.full_name}</td>
+                    <td>
+                      <Link to={`/teacher/courses/${courseId}/students/${s.user_id}`}>{s.full_name}</Link>
+                    </td>
                     <td>
                       {s.solved}/{s.submissions}
                     </td>

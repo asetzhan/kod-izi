@@ -51,6 +51,10 @@ class Settings(BaseSettings):
     max_material_bytes: int = 50 * 1024 * 1024
     clamav_host: str = "clamav"
     clamav_port: int = 3310
+    # ФТ-37: recognise scanned PDF pages with Tesseract (kaz, rus) in the extractor.
+    ocr_enabled: bool = True
+    # ФТ-30: JPlag in the analyzer worker; without it the built-in comparison is used.
+    jplag_jar: str = "/opt/jplag/jplag.jar"
 
     @model_validator(mode="after")
     def _safe_in_production(self) -> "Settings":
