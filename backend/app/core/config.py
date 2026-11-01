@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     ocr_enabled: bool = True
     # ФТ-30: JPlag in the analyzer worker; without it the built-in comparison is used.
     jplag_jar: str = "/opt/jplag/jplag.jar"
+    # ФТ-40: a trained Code-DKT model (code_dkt.pt, code_dkt.json) per course in
+    # <dir>/course-<id>; used only when its AUC beats BKT by at least `code_dkt_min_gain`.
+    code_dkt_dir: Path = Path("/data/models")
+    code_dkt_min_gain: float = 0.02
 
     @model_validator(mode="after")
     def _safe_in_production(self) -> "Settings":

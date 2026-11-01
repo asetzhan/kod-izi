@@ -134,6 +134,39 @@ def agreement_report(path: str) -> int:
     return 0
 
 
+def train_dkt(course_id: int | None, synthetic: bool, out: str | None, report: str | None) -> int:
+    """ФТ-40: train Code-DKT for a course (or on simulated data) and compare it with BKT."""
+    try:
+        from app.ml import dataset, train
+    except ImportError:
+        print("PyTorch is not installed: pip install -e '.[ml]' (CPU wheels, Q-19)")
+        return 1
+    from pathlib import Path
+
+    from app.services.student_model import model_dir
+
+    if synthetic:
+        sequences = dataset.synthetic()
+        components = list(range(1, 6))
+        target = Path(out or "models/synthetic")
+    else:
+        if course_id is None:
+            print("--course-id is required without --synthetic")
+            return 2
+        with get_sessionmaker()() as db:
+            set_system(db)
+            components, sequences = dataset.from_database(db, course_id)
+        if len(sequences) < 10 or not components:
+            print(f"not enough data: {len(sequences)} student(s); BKT stays in use")
+            return 1
+        target = Path(out) if out else model_dir(course_id)
+    result = train.run(components, sequences, target, synthetic)
+    print(result)
+    if report:
+        train.write_report(result, Path(report))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="app.cli")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -145,7 +178,14 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("retention")
     report = sub.add_parser("agreement")
     report.add_argument("csv_path")
+    dkt = sub.add_parser("train-dkt")
+    dkt.add_argument("--course-id", type=int)
+    dkt.add_argument("--synthetic", action="store_true")
+    dkt.add_argument("--out")
+    dkt.add_argument("--report")
     args = parser.parse_args(argv)
+    if args.command == "train-dkt":
+        return train_dkt(args.course_id, args.synthetic, args.out, args.report)
     if args.command == "retention":
         return retention()
     if args.command == "agreement":

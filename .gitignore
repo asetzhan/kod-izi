@@ -10,3 +10,5 @@ __pycache__/
 .pytest_cache/
 node_modules/
 dist/
+# Code-DKT models and reports trained on real data (ФТ-40): never committed
+backend/models/
