@@ -74,6 +74,7 @@ export function ContestAdminPage() {
         </ul>
       </section>
       {shown !== null && <StandingsTable key={shown} contestId={shown} />}
+      {shown !== null && <Analyses key={`a${shown}`} contestId={shown} />}
       <section className="card">
         <h2>{t("contest.create")}</h2>
         <form className="inline-form" onSubmit={create}>
@@ -130,5 +131,79 @@ export function ContestAdminPage() {
         {error !== null && <ErrorText error={error} />}
       </section>
     </>
+  );
+}
+
+interface Analysis {
+  id: number;
+  title: string;
+  editorial_md: string;
+  published: boolean;
+}
+
+/** ОТ-07: the AI drafts the analysis of each problem; the coach edits and publishes it. */
+function Analyses({ contestId }: { contestId: number }) {
+  const { t, i18n } = useTranslation();
+  const list = useResource<Analysis[]>(`/api/contests/${contestId}/analyses`);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+
+  const generate = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await apiSend("POST", `/api/contests/${contestId}/analyses`, {
+        language: i18n.language === "ru" ? "ru" : "kk",
+      });
+      list.reload();
+    } catch (caught) {
+      setError(caught);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="card">
+      <h2>{t("review.analysis")}</h2>
+      <button type="button" disabled={busy} onClick={generate}>
+        {busy ? t("generate.running") : t("review.generate")}
+      </button>
+      {error !== null && <ErrorText error={error} />}
+      {list.data?.map((a) => <AnalysisEditor key={a.id} analysis={a} onSaved={list.reload} />)}
+    </section>
+  );
+}
+
+function AnalysisEditor({ analysis, onSaved }: { analysis: Analysis; onSaved: () => void }) {
+  const { t } = useTranslation();
+  const [text, setText] = useState(analysis.editorial_md);
+  const [error, setError] = useState<unknown>(null);
+  const save = async (published: boolean) => {
+    setError(null);
+    try {
+      await apiSend("PUT", `/api/contest-analyses/${analysis.id}`, { editorial_md: text, published });
+      onSaved();
+    } catch (caught) {
+      setError(caught);
+    }
+  };
+  return (
+    <div className="inline-form">
+      <label>
+        {analysis.title} <span className="badge">AI</span>{" "}
+        {analysis.published ? t("review.published") : t("review.notPublished")}
+        <textarea rows={6} value={text} onChange={(e) => setText(e.target.value)} />
+      </label>
+      <div className="row">
+        <button type="button" onClick={() => void save(true)}>
+          {t("review.publish")}
+        </button>
+        <button type="button" onClick={() => void save(false)}>
+          {t("review.unpublish")}
+        </button>
+      </div>
+      {error !== null && <ErrorText error={error} />}
+    </div>
   );
 }

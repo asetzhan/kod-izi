@@ -15,6 +15,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { SecurityPage } from "./pages/SecurityPage";
 import { AssessmentPage } from "./pages/student/AssessmentPage";
 import { ContestPage, ContestsPage } from "./pages/student/ContestPages";
+import { KnowledgeMapPage } from "./pages/student/KnowledgeMapPage";
 import { OlympiadPage } from "./pages/student/OlympiadPage";
 import { ResultsPage } from "./pages/student/ResultsPage";
 import { StudentHomePage } from "./pages/student/StudentHomePage";
@@ -149,6 +150,10 @@ export function App() {
         <Route
           path="/student/progress/:courseId"
           element={<RequireRole role="student"><MyProgressPage /></RequireRole>}
+        />
+        <Route
+          path="/student/knowledge-map"
+          element={<RequireRole role="student"><KnowledgeMapPage /></RequireRole>}
         />
         <Route path="*" element={<RootRedirect />} />
       </Route>

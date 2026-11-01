@@ -92,6 +92,7 @@ export function ContestPage({ base = "/student" }: { base?: string }) {
         </ol>
       </section>
       <StandingsTable contestId={c.id} />
+      {base === "/student" && c.state === "finished" && !c.writing && <ContestReview contestId={c.id} />}
     </>
   );
 }
@@ -154,5 +155,99 @@ export function StandingsTable({ contestId }: { contestId: number }) {
         </tbody>
       </table>
     </section>
+  );
+}
+
+interface Review {
+  analyses: { id: number; task_id: number; title: string; editorial_md: string }[];
+  upsolve: { task_id: number; label: string; title: string; solved_in_round: boolean; upsolved: boolean }[];
+  explainable: { submission_id: number; task_id: number; explained: boolean }[];
+}
+
+/** ОТ-07: after the round: the analysis (AI, checked by the coach), upsolving, explanations. */
+function ContestReview({ contestId }: { contestId: number }) {
+  const { t } = useTranslation();
+  const review = useResource<Review>(`/api/contests/${contestId}/review`);
+  if (!review.data) return <Status loading={review.loading} error={review.error} />;
+  const titles = new Map(review.data.upsolve.map((u) => [u.task_id, `${u.label}. ${u.title}`]));
+  return (
+    <section className="card">
+      <h2>{t("review.contestTitle")}</h2>
+      <h3>{t("review.upsolve")}</h3>
+      <ul>
+        {review.data.upsolve.map((u) => (
+          <li key={u.task_id}>
+            <Link to={`/student/olympiad/problems/${u.task_id}`}>
+              {u.label}. {u.title}
+            </Link>{" "}
+            —{" "}
+            {u.solved_in_round
+              ? t("review.solvedInRound")
+              : u.upsolved
+                ? t("review.upsolved")
+                : t("review.toUpsolve")}
+          </li>
+        ))}
+      </ul>
+      <h3>{t("review.analysis")}</h3>
+      {review.data.analyses.length === 0 && <p className="muted">{t("review.noAnalysis")}</p>}
+      {review.data.analyses.map((a) => (
+        <article key={a.id}>
+          <h4>
+            {a.title} <span className="badge">AI</span>
+          </h4>
+          <p className="statement">{a.editorial_md}</p>
+        </article>
+      ))}
+      <h3>{t("review.explainTitle")}</h3>
+      <p className="muted">{t("review.explainHelp")}</p>
+      {review.data.explainable.map((e) => (
+        <ExplainForm
+          key={e.submission_id}
+          submissionId={e.submission_id}
+          title={titles.get(e.task_id) ?? `#${e.task_id}`}
+          done={e.explained}
+          onDone={review.reload}
+        />
+      ))}
+    </section>
+  );
+}
+
+function ExplainForm({
+  submissionId,
+  title,
+  done,
+  onDone,
+}: {
+  submissionId: number;
+  title: string;
+  done: boolean;
+  onDone: () => void;
+}) {
+  const { t } = useTranslation();
+  const [text, setText] = useState("");
+  const [error, setError] = useState<unknown>(null);
+  if (done) return <p>{t("review.explained", { task: title })}</p>;
+  const send = async () => {
+    setError(null);
+    try {
+      await apiSend("POST", `/api/submissions/${submissionId}/explain`, { text });
+      onDone();
+    } catch (caught) {
+      setError(caught);
+    }
+  };
+  return (
+    <div className="inline-form">
+      <label>
+        {title}
+        <textarea rows={4} minLength={20} maxLength={20000} value={text} onChange={(e) => setText(e.target.value)} />
+      </label>
+      <button type="button" disabled={text.trim().length < 20} onClick={send}>
+        {t("review.sendExplanation")}
+      </button>
+      {error !== null && <ErrorText error={error} />}
+    </div>
   );
 }
