@@ -20,7 +20,10 @@ COPY pyproject.toml ./
 RUN mkdir app && touch app/__init__.py && pip install -e ".[dev]" && rm -rf app
 
 COPY . .
-RUN chown -R app:app /app
+# Data volumes (materials, models) start from these directories: owned by `app`, so the
+# non-root application can write uploaded files (ФТ-06) and trained models (ФТ-40).
+RUN chown -R app:app /app \
+    && mkdir -p /data/materials /data/models && chown -R app:app /data
 USER app
 
 EXPOSE 8000
