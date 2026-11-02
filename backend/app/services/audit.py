@@ -29,7 +29,7 @@ class AuditAction(StrEnum):
     GROUP_TEACHER_REMOVED = "group_teacher_removed"
     USER_ACTIVATED = "user_activated"
     USER_DEACTIVATED = "user_deactivated"
-    PASSWORD_RESET = "password_reset"  # noqa: S105 - an action name, not a secret
+    PASSWORD_RESET = "password_reset"  # noqa: S105  # nosec B105 - an action name
     TOPIC_SAVED = "topic_saved"
     TASK_CREATED = "task_created"
     TASK_UPDATED = "task_updated"
