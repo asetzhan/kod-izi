@@ -7,6 +7,7 @@ import { type Role, ROLES } from "./api/client";
 import { homeFor, ROLE_HOME, useAuth } from "./auth/AuthContext";
 import { RequireRole } from "./auth/RequireRole";
 import { Layout } from "./components/Layout";
+import { AdminHomePage } from "./pages/admin/AdminHomePage";
 import { CabinetPage } from "./pages/CabinetPage";
 import { CoachHomePage } from "./pages/coach/CoachHomePage";
 import { ChooseRolePage } from "./pages/ChooseRolePage";
@@ -39,6 +40,7 @@ const HOME_PAGES: Partial<Record<Role, ReactNode>> = {
   student: <StudentHomePage />,
   teacher: <CoursesPage />,
   coach: <CoachHomePage />,
+  admin: <AdminHomePage />,
 };
 
 function RootRedirect() {

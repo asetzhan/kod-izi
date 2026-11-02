@@ -23,6 +23,13 @@ class AuditAction(StrEnum):
     COURSE_UPDATED = "course_updated"
     COURSE_TEACHER_ADDED = "course_teacher_added"
     COURSE_GROUP_ADDED = "course_group_added"
+    COURSE_GROUP_REMOVED = "course_group_removed"
+    COURSE_TEACHER_REMOVED = "course_teacher_removed"
+    GROUP_MEMBER_REMOVED = "group_member_removed"
+    GROUP_TEACHER_REMOVED = "group_teacher_removed"
+    USER_ACTIVATED = "user_activated"
+    USER_DEACTIVATED = "user_deactivated"
+    PASSWORD_RESET = "password_reset"  # noqa: S105  # nosec B105 - an action name
     TOPIC_SAVED = "topic_saved"
     TASK_CREATED = "task_created"
     TASK_UPDATED = "task_updated"
