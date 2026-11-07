@@ -246,7 +246,7 @@ services:
 
   # Local LLM (Q-08, Q-09). Optional: `make llm` starts it and downloads the models.
   ollama:
-    image: ollama/ollama:0.12.6
+    image: ollama/ollama:0.40.14
     profiles: [llm]
     volumes:
       - ollama:/root/.ollama
