@@ -19,7 +19,7 @@ dependencies = [
     "pyjwt==2.15.1",
     "redis==8.1.0",
     "rq==3.0.0",
-    "python-multipart==0.0.32",
+    "python-multipart==0.0.33",
     "defusedxml==0.7.1",
     "httpx==0.28.1",
     "pgvector==0.5.1",
